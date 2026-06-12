@@ -53,14 +53,16 @@ once-per-second refresh never spawns a subprocess storm.
 
 ### Colors
 
-Each bar and percentage is colored by load. The rate-limit bars follow the
-**projection**, not the raw used value:
+Every field climbs the same load ladder, driven by its own progress. The
+rate-limit bars feed it their **projection**, not the raw used value; CTX
+feeds it the used value:
 
-| Color | Threshold |
+| Color | Load |
 |---|---|
-| green | under 50% |
-| yellow | 50–80% |
-| red | 80%+ |
+| blue | under 50% |
+| green | 50–70% |
+| amber | 70–90% |
+| red | 90%+ |
 
 The projection is suppressed for the first 2% of a window, where it is just noise.
 
