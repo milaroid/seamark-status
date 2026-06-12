@@ -255,12 +255,6 @@ def task_counts(m_dir):
     return counts["Active"], counts["Completed"]
 
 
-def gap_count(m_dir):
-    """Number of HIGH/CRITICAL entries in GAPS.md."""
-    text = _read(os.path.join(m_dir, "GAPS.md"))
-    return len(re.findall(r"\b(?:HIGH-\d+|CRITICAL)\b", text))
-
-
 def iterate_loop(m_dir):
     """Latest 'Loop N/3: M fixed, K remaining' from PROGRESS.md, or None."""
     hits = re.findall(r"Loop (\d+)/3: \d+ fixed, (\d+) remaining",
@@ -359,10 +353,8 @@ def cockpit_line(m_dir, phase):
             parts.append(f"{col}loop {n}/3 ·{remaining} left{RESET}")
     tasks = task_counts(m_dir)
     if tasks and (tasks[0] or tasks[1]):
-        parts.append(f"{DIM}☐{tasks[0]} ✓{tasks[1]}{RESET}")
-    gaps = gap_count(m_dir)
-    if gaps:
-        parts.append(f"{RED}⚠{gaps}{RESET}")
+        done_n, total = tasks[1], tasks[0] + tasks[1]
+        parts.append(f"{DIM}tasks {done_n}/{total}{RESET}")
     return join(parts)
 
 

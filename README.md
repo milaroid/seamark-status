@@ -12,7 +12,7 @@ Single file. Python standard library only. No dependencies.
 
 ```
 Opus 4.8  ·  ⎇ feat/PIKO-142 ●3 ↑1  ·  PIKO-142
-m implement ◉◉◐○○ 2/5 ·12m  ·  ☐2 ✓4  ·  ⚠2
+m implement ◉◉◐○○ 2/5 ·12m  ·  tasks 4/6
 CTX ███░░░░░ 41%  ·  5H ██░░░░░░ 23%→41% ·2h13m  ·  WK ████░░░░ 76%→104% ·1d20h
 ```
 
@@ -36,8 +36,7 @@ plain-text shape.)
 |---|---|
 | `m implement ◉◉◐○○ 2/5 ·12m` | Phase dots (`◉` done · `◐` current · `○` pending), the running phase, and how long it has been running (mtime of the phase marker). |
 | `loop 2/3 ·4 left` | The `/m:iterate` loop counter and remaining issues, parsed from `.m/PROGRESS.md`. Iterate phase only. |
-| `☐2 ✓4` | Active and completed tasks from `.m/TASKS.md`. |
-| `⚠2` | HIGH/CRITICAL findings still open in `.m/GAPS.md`. |
+| `tasks 4/6` | Task progress (completed/total) from `.m/TASKS.md`. |
 
 **Line 2: metrics**
 
