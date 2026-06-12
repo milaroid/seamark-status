@@ -35,9 +35,10 @@ above is the plain-text shape.)
 
 ### The burn duck
 
-The arrow (`used%→projected%`) and the duck come from projecting end-of-window
-usage from how much of the window has already elapsed (`used% × window / elapsed`).
-The faster you burn, the faster the duck runs:
+Classic rubber-duck debugging has you explain the bug to the duck. This duck
+explains the burn to you. The arrow (`used%→projected%`) and the duck come from
+projecting end-of-window usage from how much of the window has already elapsed
+(`used% × window / elapsed`). The faster you burn, the faster the duck runs:
 
 | Marker | Projected end-of-window usage | Read as |
 |---|---|---|
