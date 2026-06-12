@@ -66,8 +66,6 @@ The projection is suppressed for the first 2% of a window, where it is just nois
 
 ## Install
 
-### Claude Code plugin (recommended)
-
 Inside Claude Code:
 
 ```
@@ -79,52 +77,10 @@ Inside Claude Code:
 The setup command copies the bundled script to `~/.claude/m-statusline.py` and
 wires the `statusLine` block into `~/.claude/settings.json` (existing settings
 preserved, previous file backed up to `settings.json.bak`). Restart Claude Code
-and the duck starts running.
+and the duck starts running. Re-running setup is safe; it just refreshes the
+script and the settings block.
 
-### One-line installer
-
-Same effect without the plugin system: downloads the script and wires
-`settings.json` for you:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/milorad-teodorovic/m-statusline/main/install.sh | bash
-```
-
-Prefer to read before you run? Same script, two steps:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/milorad-teodorovic/m-statusline/main/install.sh -o install.sh
-less install.sh && bash install.sh
-```
-
-Restart Claude Code (or start a new session) and the duck starts running.
-Re-running the installer is safe; it just refreshes the script and the
-settings block.
-
-### Manual install
-
-No installer, two steps:
-
-1. Drop `statusline.py` somewhere stable, e.g. `~/.claude/m-statusline.py`:
-
-   ```sh
-   curl -fsSL https://raw.githubusercontent.com/milorad-teodorovic/m-statusline/main/statusline.py \
-     -o ~/.claude/m-statusline.py
-   ```
-
-2. Point Claude Code at it in `~/.claude/settings.json`:
-
-   ```json
-   {
-     "statusLine": {
-       "type": "command",
-       "command": "python3 ~/.claude/m-statusline.py",
-       "refreshInterval": 10
-     }
-   }
-   ```
-
-Either way there are no packages. The script reads the
+There are no packages. The script reads the
 [statusLine stdin JSON](https://platform.claude.com/docs/en/statusline) Claude Code
 feeds it and writes the two lines back.
 
