@@ -9,7 +9,7 @@ Single file. Python standard library only. No dependencies.
 
 ```
 Opus 4.8  ·  m implement ◉◉◐○○ 2/5
-CTX ███░░░░░ 41%  ·  5H 🧊 ██░░░░░░ 23%→41% ·2h13m  ·  WK 🚨 ████░░░░ 55%→109% ·3d11h
+CTX ███░░░░░ 41%  ·  5H 🦆 ██░░░░░░ 23%→41% ·2h13m  ·  WK 🦆🔥 ████░░░░ 55%→109% ·3d11h
 ```
 
 (In the terminal each segment is colored — green / yellow / red by load. The block
@@ -33,16 +33,19 @@ above is the plain-text shape.)
 | `WK … 55%→109%` | 7-day rate limit: used now → projected at window end. |
 | `·2h13m` | Time until that window resets. |
 
-### Pace markers
+### The burn duck
 
-The arrow (`used%→projected%`) and the emoji come from projecting end-of-window
-usage from how much of the window has already elapsed (`used% × window / elapsed`):
+The arrow (`used%→projected%`) and the duck come from projecting end-of-window
+usage from how much of the window has already elapsed (`used% × window / elapsed`).
+The faster you burn, the faster the duck runs:
 
 | Marker | Projected end-of-window usage | Read as |
 |---|---|---|
-| 🧊 | under 70% | behind pace — comfortable headroom |
-| 🔥 | 70–99% | on pace — tracking to spend most of the window |
-| 🚨 | 100%+ | ahead of pace — on track to hit the limit before reset |
+| 🦆 | under 70% | strolling — comfortable headroom |
+| 🦆💨 | 70–99% | sprinting — tracking to spend most of the window |
+| 🦆🔥 | 100%+ | on fire — on track to hit the limit before reset |
+
+The duck's animated cousin lives on [milorad.io/m-statusline](https://milorad.io/m-statusline).
 
 ### Colors
 

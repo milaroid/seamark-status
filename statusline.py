@@ -84,14 +84,14 @@ def project(used, resets_at, window):
 
 
 def pace_emoji(proj):
-    """Pace marker from projected end-of-window usage."""
+    """Burn-duck pace marker from projected end-of-window usage."""
     if proj is None:
         return ""
     if proj >= 100:
-        return "🚨 "  # ahead of pace: on track to blow the limit before reset
+        return "🦆🔥 "  # duck on fire: on track to blow the limit before reset
     if proj >= 70:
-        return "🔥 "  # on pace: tracking to spend most of the window
-    return "🧊 "       # behind pace: comfortable headroom
+        return "🦆💨 "  # duck sprinting: tracking to spend most of the window
+    return "🦆 "        # duck strolling: comfortable headroom
 
 
 def limit_segment(label, obj, window):
