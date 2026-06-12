@@ -1,24 +1,23 @@
 #!/usr/bin/env python3
-"""Claude Code statusline: model, /m pipeline stage, pace-aware usage bars.
+"""Claude Code statusline: model, git, /m stage, pace-aware usage, forecast.
 
-Reads the statusLine stdin JSON (https://platform.claude.com/docs/en/statusline)
-and renders two lines:
+Reads the statusLine stdin JSON (https://code.claude.com/docs/en/statusline)
+and renders three lines:
 
-  line 1 (identity): model  ·  m stage ◉◉◐○○ 2/5
-  line 2 (metrics):  CTX ████░░░░ 41%  ·  5H ██░░░░░░ 23%→41% ·2h13m  ·  WK …  · ›› pace yourself
+  line 1 (identity): model  ·  ⎇ branch ●3 ↑1  ·  m stage ◉◉◐○○ 2/5
+  line 2 (metrics):  CTX ████░░░░ 41%  ·  5H ██░░ 23%→41% ·2h13m  ·  WK …
+  line 3 (forecast): → WK cap ~6h  ·  ›››toasty
 
 Usage bars are pace-aware: the 5-hour and weekly bars project end-of-window
 usage from how much of the window has already elapsed (used% x window/elapsed)
-and color themselves by that projection, so a green-looking 60% that is on
-track to blow past 100% reads red now instead of at reset time.
-
-The metrics line ends with a pace banner: a tier-colored speed streak (one
-chevron when strolling, two when sprinting, three when on fire) plus a playful
-motivational line. The on-fire banner shivers.
+so a green-looking 60% that is on track to blow past 100% reads red now. The
+forecast line turns that projection into a verdict — time until you hit the
+limit at the current rate — plus a one-word pace tag.
 """
 
 import json
 import os
+import subprocess
 import sys
 import time
 
@@ -62,19 +61,22 @@ def humanize(resets_at):
     """Compact reset countdown like ·2h13m / ·3d5h, or empty if unknown."""
     if not resets_at:
         return ""
-    delta = int(resets_at) - int(time.time())
-    if delta <= 0:
-        return f" {DIM}·now{RESET}"
-    days, rem = divmod(delta, 86400)
+    return f" {DIM}·{humanize_secs(int(resets_at) - time.time())}{RESET}"
+
+
+def humanize_secs(secs):
+    """Duration like 6h · 45m · 2d3h."""
+    secs = max(0, int(secs))
+    if secs < 60:
+        return "now"
+    days, rem = divmod(secs, 86400)
     hours, rem = divmod(rem, 3600)
     mins = rem // 60
     if days:
-        txt = f"{days}d{hours}h"
-    elif hours:
-        txt = f"{hours}h{mins}m"
-    else:
-        txt = f"{mins}m"
-    return f" {DIM}·{txt}{RESET}"
+        return f"{days}d{hours}h"
+    if hours:
+        return f"{hours}h{mins}m"
+    return f"{mins}m"
 
 
 def project(used, resets_at, window):
@@ -88,25 +90,98 @@ def project(used, resets_at, window):
 
 
 # ---------------------------------------------------------------------------
-# Pace banner: a tier-colored speed streak (chevron count = pace) plus a
-# playful motivational line, keyed to the worst rate-limit projection. Three
-# tiers: strolling (blue) < 70, sprinting (yellow) 70-99, on fire (red) 100+.
-# Five messages per tier, rotating one every two minutes. The on-fire banner
-# shivers: a one-cell horizontal jitter each refresh — the most "rapid" a
-# once-per-second statusline can look. The text stays a single solid color.
+# Git segment: branch + worktree + dirty/ahead/behind, read by running git in
+# the current directory (the statusLine JSON carries no current-branch field).
+# Results are cached on disk per cwd so the once-per-second refresh does not
+# spawn a fresh fistful of subprocesses every tick.
+GIT_CACHE = os.path.expanduser("~/.claude/.m-statusline-gitcache.json")
+GIT_TTL = 5
+
+
+def _git(cwd, *args):
+    try:
+        out = subprocess.run(["git", "-C", cwd, *args],
+                             capture_output=True, text=True, timeout=1.0)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.stdout.strip() if out.returncode == 0 else None
+
+
+def _compute_git(cwd, worktree):
+    branch = _git(cwd, "symbolic-ref", "--short", "HEAD")
+    detached = False
+    if branch is None:
+        branch = _git(cwd, "rev-parse", "--short", "HEAD")
+        if branch is None:
+            return None  # not a git repo
+        detached = True
+    porcelain = _git(cwd, "status", "--porcelain")
+    dirty = len([ln for ln in porcelain.splitlines() if ln.strip()]) if porcelain else 0
+    ahead = behind = 0
+    lr = _git(cwd, "rev-list", "--count", "--left-right", "@{u}...HEAD")
+    if lr and "\t" in lr:
+        left, right = lr.split("\t")[:2]
+        behind, ahead = int(left or 0), int(right or 0)
+    return {"branch": branch, "detached": detached, "dirty": dirty,
+            "ahead": ahead, "behind": behind, "worktree": worktree}
+
+
+def git_info(cwd, worktree):
+    """Cached git state for cwd, recomputed at most once per GIT_TTL seconds."""
+    if not cwd:
+        return None
+    now = time.time()
+    cache = {}
+    try:
+        with open(GIT_CACHE) as fh:
+            cache = json.load(fh)
+    except (OSError, json.JSONDecodeError, ValueError):
+        pass
+    entry = cache.get(cwd)
+    if entry and now - entry["ts"] < GIT_TTL:
+        return entry["data"]
+    data = _compute_git(cwd, worktree)
+    cache[cwd] = {"ts": now, "data": data}
+    try:
+        with open(GIT_CACHE, "w") as fh:
+            json.dump(cache, fh)
+    except OSError:
+        pass
+    return data
+
+
+def git_segment(info):
+    """⎇ branch with worktree label and dirty/ahead/behind counters."""
+    if not info:
+        return None
+    head = (f"{DIM}⎇ {info['branch']}{RESET}" if info["detached"]
+            else f"{CYAN}⎇ {info['branch']}{RESET}")
+    extra = []
+    if info.get("worktree"):
+        extra.append(f"{DIM}⌂{info['worktree']}{RESET}")
+    if info["dirty"]:
+        extra.append(f"{YELLOW}●{info['dirty']}{RESET}")
+    if info["ahead"]:
+        extra.append(f"{GREEN}↑{info['ahead']}{RESET}")
+    if info["behind"]:
+        extra.append(f"{RED}↓{info['behind']}{RESET}")
+    return head + ((" " + " ".join(extra)) if extra else "")
+
+
+# ---------------------------------------------------------------------------
+# Forecast line: a verdict (time until you hit a limit at the current rate)
+# plus a one-word pace tag. Three tiers: strolling (blue) < 70, sprinting
+# (yellow) 70-99, on fire (red) 100+. Tags rotate one every two minutes.
 TIER_BLUE = "\033[38;2;90;165;225m"
 TIER_YELLOW = "\033[38;2;225;190;70m"
 TIER_RED = "\033[38;2;225;70;50m"
 TIER_COLORS = (TIER_BLUE, TIER_YELLOW, TIER_RED)
 ROTATE_SECONDS = 120
 
-MESSAGES = (
-    ("cruisin'", "smooth sailing", "tank's full, go wild", "easy money",
-     "all systems chill"),
-    ("gettin' toasty", "ease off the gas", "mind the meter", "steady, tiger",
-     "pace yourself"),
-    ("she's gonna blow", "BRAKES. NOW.", "you're torching it", "mayday, mayday",
-     "smoke's pourin' out"),
+TAGS = (
+    ("chill", "cruisin", "breezy"),
+    ("pushing", "toasty", "warm"),
+    ("blazing", "cooked", "mayday"),
 )
 
 
@@ -117,17 +192,48 @@ def pace_tier(proj):
     return 2 if proj >= 100 else 1 if proj >= 70 else 0
 
 
-def pace_banner(worst):
-    """Tier-colored speed streak + rotating motivational line; shivers on fire."""
+def pace_tag(tier):
+    """Tier-colored speed streak + one rotating word."""
+    word = TAGS[tier][(int(time.time()) // ROTATE_SECONDS) % len(TAGS[tier])]
+    return f"{TIER_COLORS[tier]}{'›' * (tier + 1)}{word}{RESET}"
+
+
+def forecast_line(windows):
+    """`→ <verdict> · ›››tag` from the worst projection, or None when no data."""
+    worst = None
+    soonest_cap = None     # (label, seconds-to-100%)
+    soonest_reset = None   # (label, seconds-to-reset)
+    for label, obj, window in windows:
+        obj = obj or {}
+        used = obj.get("used_percentage")
+        resets = obj.get("resets_at")
+        proj = project(used, resets, window)
+        if proj is None:
+            continue
+        worst = proj if worst is None else max(worst, proj)
+        if resets:
+            secs = int(resets) - time.time()
+            if soonest_reset is None or secs < soonest_reset[1]:
+                soonest_reset = (label, secs)
+            if proj >= 100 and used:
+                elapsed = window - secs
+                ttc = (100 - used) * elapsed / used
+                if soonest_cap is None or ttc < soonest_cap[1]:
+                    soonest_cap = (label, ttc)
     tier = pace_tier(worst)
     if tier is None:
-        return ""
-    streak = "›" * (tier + 1)
-    message = MESSAGES[tier][(int(time.time()) // ROTATE_SECONDS) % len(MESSAGES[tier])]
-    text = f"{streak} {message}"
-    # on fire: jitter the whole banner one cell each refresh; one solid color.
-    jitter = " " if tier == 2 and int(time.time()) % 2 else ""
-    return f"{jitter}{TIER_COLORS[tier]}{text}{RESET}"
+        return None
+    if soonest_cap:
+        verdict = (f"{TIER_RED}{soonest_cap[0]} cap ~"
+                   f"{humanize_secs(soonest_cap[1])}{RESET}")
+    elif soonest_reset:
+        col = TIER_YELLOW if tier == 1 else TIER_BLUE
+        word = "tight" if tier == 1 else "clear"
+        verdict = (f"{col}{word} · {soonest_reset[0]} resets "
+                   f"{humanize_secs(soonest_reset[1])}{RESET}")
+    else:
+        verdict = f"{TIER_COLORS[tier]}on pace{RESET}"
+    return f"{DIM}→{RESET} {verdict}{SEP}{pace_tag(tier)}"
 
 
 def limit_segment(label, obj, window):
@@ -218,18 +324,15 @@ def main():
     except (json.JSONDecodeError, ValueError):
         return
 
-    cwd = data.get("cwd") or (data.get("workspace") or {}).get("current_dir")
+    workspace = data.get("workspace") or {}
+    cwd = data.get("cwd") or workspace.get("current_dir")
     limits = data.get("rate_limits") or {}
     fh = limits.get("five_hour") or {}
     sd = limits.get("seven_day") or {}
-    projections = [
-        project(fh.get("used_percentage"), fh.get("resets_at"), FIVE_HOUR),
-        project(sd.get("used_percentage"), sd.get("resets_at"), SEVEN_DAY),
-    ]
-    worst = max((p for p in projections if p is not None), default=None)
 
     identity = join([
         model_segment(data),
+        git_segment(git_info(cwd, workspace.get("git_worktree"))),
         mstage_segment(cwd),
     ])
     metrics = join([
@@ -237,11 +340,9 @@ def main():
         limit_segment("5H", fh, FIVE_HOUR),
         limit_segment("WK", sd, SEVEN_DAY),
     ])
-    banner = pace_banner(worst)
-    if banner:
-        metrics = f"{metrics}{SEP}{banner}"
+    forecast = forecast_line([("5H", fh, FIVE_HOUR), ("WK", sd, SEVEN_DAY)])
 
-    lines = [ln for ln in (identity, metrics) if ln]
+    lines = [ln for ln in (identity, metrics, forecast) if ln]
     sys.stdout.write("\n".join(lines))
 
 
