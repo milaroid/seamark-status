@@ -17,6 +17,7 @@ limit at the current rate — plus a one-word pace tag.
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -264,12 +265,23 @@ def model_segment(data):
     return f"{CYAN}{name}{RESET}" if name else None
 
 
+# ---------------------------------------------------------------------------
+# /m pipeline cockpit. m-statusline is the m-pipeline instrument panel: while
+# /m:develop runs, a cockpit line shows the phase dots, the running phase and
+# its runtime, task flow and blocker counts (and the iterate loop). When the
+# pipeline is idle it stays quiet except for a small outcome badge and alerts
+# (a BLOCKED last run, a stale index). Everything is read from the .m/ state
+# files and learning signals m-pipeline already writes.
+OUTCOMES = os.path.expanduser("~/.claude/m-learning/signals/outcomes.jsonl")
+STALE_DAYS = 30
+
+
 def find_m_dir(cwd):
-    """Walk up from cwd to the nearest .m/ holding a DEVELOP_ACTIVE marker."""
+    """Walk up from cwd to the nearest .m/ directory."""
     path = os.path.abspath(cwd or os.getcwd())
     while True:
         candidate = os.path.join(path, ".m")
-        if os.path.isfile(os.path.join(candidate, "DEVELOP_ACTIVE")):
+        if os.path.isdir(candidate):
             return candidate
         parent = os.path.dirname(path)
         if parent == path:
@@ -288,15 +300,106 @@ def read_current_phase(m_dir):
     return None
 
 
-def mstage_segment(cwd):
-    """Show the active /m:develop phase as labelled dots over the pipeline."""
-    m_dir = find_m_dir(cwd)
-    if not m_dir:
-        return None
-    phase = read_current_phase(m_dir)
-    if not phase:
-        return None
+def _read(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return fh.read()
+    except OSError:
+        return ""
 
+
+def task_counts(m_dir):
+    """(active, completed) bullet counts from TASKS.md sections."""
+    text = _read(os.path.join(m_dir, "TASKS.md"))
+    if not text:
+        return None
+    counts = {"Active": 0, "Completed": 0}
+    section = None
+    for line in text.splitlines():
+        if line.startswith("## "):
+            section = line[3:].strip()
+        elif line.lstrip().startswith("- ") and section in counts:
+            counts[section] += 1
+    return counts["Active"], counts["Completed"]
+
+
+def gap_count(m_dir):
+    """Number of HIGH/CRITICAL entries in GAPS.md."""
+    text = _read(os.path.join(m_dir, "GAPS.md"))
+    return len(re.findall(r"\b(?:HIGH-\d+|CRITICAL)\b", text))
+
+
+def iterate_loop(m_dir):
+    """Latest 'Loop N/3: M fixed, K remaining' from PROGRESS.md, or None."""
+    hits = re.findall(r"Loop (\d+)/3: \d+ fixed, (\d+) remaining",
+                      _read(os.path.join(m_dir, "PROGRESS.md")))
+    return hits[-1] if hits else None
+
+
+def jira_key(m_dir, branch):
+    """Ticket key captured from the branch via .m/jira.yml branchPattern."""
+    if not branch:
+        return None
+    pattern = None
+    for line in _read(os.path.join(m_dir, "jira.yml")).splitlines():
+        if line.strip().startswith("branchPattern:"):
+            pattern = line.split(":", 1)[1].strip().strip("'\"")
+            # YAML double-quoted strings escape backslashes; collapse them.
+            pattern = pattern.replace("\\\\", "\\")
+    if not pattern:
+        return None
+    try:
+        hit = re.search(pattern, branch)
+    except re.error:
+        return None
+    return hit.group(1) if hit and hit.groups() else None
+
+
+def last_outcomes():
+    """Most recent verdict and the trailing PASSED streak from outcomes.jsonl."""
+    lines = [ln for ln in _read(OUTCOMES).splitlines() if ln.strip()]
+    verdicts = []
+    for ln in lines:
+        try:
+            obj = json.loads(ln)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if obj.get("type") == "outcome" and obj.get("verdict"):
+            verdicts.append(obj["verdict"])
+    if not verdicts:
+        return None, 0
+    streak = 0
+    for v in reversed(verdicts):
+        if v != "PASSED":
+            break
+        streak += 1
+    return verdicts[-1], streak
+
+
+def index_stale_days(m_dir):
+    """Days since .m/INDEX.md was touched, or None if absent."""
+    try:
+        age = time.time() - os.path.getmtime(os.path.join(m_dir, "INDEX.md"))
+    except OSError:
+        return None
+    return int(age // 86400)
+
+
+def idle_badge(m_dir):
+    """Quiet idle summary: alerts loudly, brags softly, says nothing otherwise."""
+    stale = index_stale_days(m_dir)
+    if stale is not None and stale >= STALE_DAYS:
+        return f"{YELLOW}m idx stale {stale}d{RESET}"
+    verdict, streak = last_outcomes()
+    if verdict == "BLOCKED":
+        return f"{RED}m ✗ last run BLOCKED{RESET}"
+    if verdict == "PASSED" and streak >= 2:
+        return f"{DIM}m ✓×{streak}{RESET}"
+    return None
+
+
+def cockpit_line(m_dir, phase):
+    """The pipeline cockpit: dots, phase + runtime, loop, tasks, blockers."""
     def done(ph):
         return os.path.isfile(os.path.join(m_dir, f"phase-{ph}-done"))
 
@@ -308,10 +411,27 @@ def mstage_segment(cwd):
             dots.append(f"{YELLOW}◐{RESET}")
         else:
             dots.append(f"{DIM}○{RESET}")
-    completed = sum(1 for ph in PIPELINE if done(ph))
     track = "".join(dots)
-    return (f"{DIM}m{RESET} {CYAN}{phase}{RESET} {track} "
-            f"{DIM}{completed}/{len(PIPELINE)}{RESET}")
+
+    parts = [f"{DIM}m{RESET} {CYAN}develop{RESET} {track} {CYAN}{phase}{RESET}"]
+    try:  # phase runtime from the -started marker's mtime
+        started = os.path.getmtime(os.path.join(m_dir, f"phase-{phase}-started"))
+        parts[0] += f" {DIM}·{humanize_secs(time.time() - started)}{RESET}"
+    except OSError:
+        pass
+    if phase == "iterate":
+        loop = iterate_loop(m_dir)
+        if loop:
+            n, remaining = loop
+            col = GREEN if remaining == "0" else YELLOW
+            parts.append(f"{col}loop {n}/3 ·{remaining} left{RESET}")
+    tasks = task_counts(m_dir)
+    if tasks and (tasks[0] or tasks[1]):
+        parts.append(f"{DIM}☐{tasks[0]} ✓{tasks[1]}{RESET}")
+    gaps = gap_count(m_dir)
+    if gaps:
+        parts.append(f"{RED}⚠{gaps}{RESET}")
+    return join(parts)
 
 
 def join(parts):
@@ -330,11 +450,18 @@ def main():
     fh = limits.get("five_hour") or {}
     sd = limits.get("seven_day") or {}
 
+    git = git_info(cwd, workspace.get("git_worktree"))
+    m_dir = find_m_dir(cwd)
+    phase = read_current_phase(m_dir) if m_dir else None
+
+    ticket = jira_key(m_dir, git["branch"]) if (m_dir and git) else None
     identity = join([
         model_segment(data),
-        git_segment(git_info(cwd, workspace.get("git_worktree"))),
-        mstage_segment(cwd),
+        git_segment(git),
+        f"{DIM}{ticket}{RESET}" if ticket else None,
+        idle_badge(m_dir) if (m_dir and not phase) else None,
     ])
+    cockpit = cockpit_line(m_dir, phase) if (m_dir and phase) else None
     metrics = join([
         ctx_segment(data),
         limit_segment("5H", fh, FIVE_HOUR),
@@ -342,7 +469,7 @@ def main():
     ])
     forecast = forecast_line([("5H", fh, FIVE_HOUR), ("WK", sd, SEVEN_DAY)])
 
-    lines = [ln for ln in (identity, metrics, forecast) if ln]
+    lines = [ln for ln in (identity, cockpit, metrics, forecast) if ln]
     sys.stdout.write("\n".join(lines))
 
 

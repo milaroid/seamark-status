@@ -1,15 +1,19 @@
 # m-statusline
 
-A three-line [Claude Code](https://claude.com/claude-code) statusline that shows the
-active model, your git branch, your `/m` pipeline stage, and **pace-aware** usage
-bars that project where your 5-hour and weekly limits will land at reset — then
-forecasts when you'll hit the limit at the current rate. An innocent-looking 60%
-that is on track to blow past 100% reads red *now* instead of at reset time.
+The cockpit for the [`/m` pipeline](https://github.com/milorad-teodorovic/m-pipeline):
+a [Claude Code](https://claude.com/claude-code) statusline that shows the active
+model, your git branch and ticket, **pace-aware** usage bars that project where
+your 5-hour and weekly limits will land at reset, and a forecast of when you'll
+hit the limit at the current rate. While `/m:develop` runs, a cockpit line tracks
+the phase, its runtime, the task flow, and open blockers — live, from the `.m/`
+state the pipeline writes. Without m-pipeline it degrades to a clean model + git
++ usage statusline, but the cockpit is the point.
 
 Single file. Python standard library only. No dependencies.
 
 ```
-Opus 4.8  ·  ⎇ main ●3 ↑1  ·  m implement ◉◉◐○○ 2/5
+Opus 4.8  ·  ⎇ feat/PIKO-142 ●3 ↑1  ·  PIKO-142
+m develop ◉◉◐○○ implement ·12m  ·  ☐2 ✓4  ·  ⚠2
 CTX ███░░░░░ 41%  ·  5H ██░░░░░░ 23%→41% ·2h13m  ·  WK ████░░░░ 76%→104% ·1d20h
 → WK cap ~6h  ·  ›››toasty
 ```
@@ -25,7 +29,17 @@ plain-text shape.)
 |---|---|
 | `Opus 4.8` | Active model display name. |
 | `⎇ main ●3 ↑1` | Git branch, with `●` uncommitted count, `↑` commits ahead, `↓` behind. Shows the worktree name (`⌂name`) inside a worktree, a short SHA when detached, and nothing outside a repo. |
-| `m implement ◉◉◐○○ 2/5` | Current `/m:develop` phase and progress across the pipeline. `◉` done · `◐` current · `○` pending. Hidden when you are not inside an active `/m:develop` run. |
+| `PIKO-142` | Jira ticket captured from the branch via `.m/jira.yml` `branchPattern`. |
+| `m ✓×5` / `m ✗ last run BLOCKED` / `m idx stale 42d` | Idle pipeline badge: a quiet streak of consecutive `PASSED` runs (from m-pipeline's learning signals), a loud alert when the last run blocked, or a stale-index warning. Only one shows, and only when the pipeline is idle. |
+
+**Pipeline cockpit (appears while `/m:develop` runs)**
+
+| Segment | Meaning |
+|---|---|
+| `m develop ◉◉◐○○ implement ·12m` | Phase dots (`◉` done · `◐` current · `○` pending), the running phase, and how long it has been running (mtime of the phase marker). |
+| `loop 2/3 ·4 left` | The `/m:iterate` loop counter and remaining issues, parsed from `.m/PROGRESS.md`. Iterate phase only. |
+| `☐2 ✓4` | Active and completed tasks from `.m/TASKS.md`. |
+| `⚠2` | HIGH/CRITICAL findings still open in `.m/GAPS.md`. |
 
 **Line 2: metrics**
 
