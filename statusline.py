@@ -90,7 +90,9 @@ def project(used, resets_at, window):
 # replaces a pace emoji next to each rate bar. Colored by that window's
 # projection; waddles a cell per refresh; grows a flame trail when on fire.
 _TIER_RGB = [(88, 164, 224), (224, 130, 60), (224, 70, 50)]  # stroll, sprint, fire
-_PX = {"L": (240, 150, 40), "F": (235, 95, 40), "G": (250, 200, 90), "E": (10, 22, 42)}
+_TIER_DARK = [(58, 118, 178), (178, 100, 46), (176, 54, 40)]
+_PX = {"L": (240, 150, 40), "F": (235, 95, 40), "G": (250, 200, 90),
+       "E": (10, 22, 42), "o": (240, 237, 225), "W": (252, 252, 246)}
 _BLANK = "\u2800"  # braille blank: empty but survives statusline line-trim
 
 
@@ -123,48 +125,70 @@ def pace_emoji(proj):
     return " 🦆 " if hop else "🦆  "
 
 
-def big_duck_lines(proj, scale=2):
-    """The big duck for /m-status: half-block pixel art at `scale`x.
-
-    8 sprite pixels tall -> 8*scale/2 text rows. Colored by pace, flame when
-    on fire. Returns [] when there is no projection to draw from.
+def big_duck_lines(proj):
+    """The big duck for /m-status: the full-resolution sprite from the
+    m-statusline web page (outline, wing, eye glint), rendered as half-block
+    pixel art. 20 pixel rows -> 10 text rows. Colored by pace, flame when on
+    fire. Returns [] when there is no projection to draw from.
     """
     if proj is None:
         return []
     tier = 2 if proj >= 100 else 1 if proj >= 70 else 0
     body = _TIER_RGB[tier]
+    dark = _TIER_DARK[tier]
     hop = int(time.time()) % 2
-    rows = [
-        "..........BBBB..",
-        ".........BBBBBB.",
-        ".........BEBBLLL",
-        "....B...BBBBB...",
-        "....BB.BBBBBB...",
-        "...BBBBBBBBBB...",
-        "....BBBBBBBB....",
-        "......L....L...." if hop else ".......L..L.....",
+
+    base = [
+        "              oooooo",
+        "             oBBBBBBo",
+        "            oBBBBBBBBo",
+        "            oBBBBBWEBo",
+        "            oBBBBBBBBooooo",
+        "            oBBBBBBBBoLLLLo",
+        "            oBBBBBBBBooooo",
+        "   oo       oBBBBBBBo",
+        "  oBBo      oBBBBBBo",
+        "  oBBBo    oBBBBBBBo",
+        "   oBBBo  oBBBBBBBBo",
+        "   oBBBBooBBBBBBBBBo",
+        "    oBBBBBBBBBBBBBBo",
+        "    oBBBBBBBBBBBBBBo",
+        "     oBBBBBBBBBBBBo",
+        "      oBBBBBBBBBBo",
+        "       oooooooooo",
     ]
+    wing = ["            DDDD", "          DDDDDD", "          DDDDD"]
+    legs = (["         oL        oL", "        oLLo      oLLo"] if hop
+            else ["            oL  oL", "           oLLooLLo"])
+    flame = (["  F", " FGF", "FGGF", " FGF", "  F"] if hop
+             else [" F", "FGF", " FGGFF", "FGF", " F"])
+
+    # compose onto a 32x20 character canvas, same offsets as the web page
+    W, H = 32, 20
+    canvas = [["." for _ in range(W)] for _ in range(H)]
+
+    def blit(grid, xo, yo):
+        for gy, row in enumerate(grid):
+            for gx, c in enumerate(row):
+                if c != "." and c != " " and 0 <= yo + gy < H and 0 <= xo + gx < W:
+                    canvas[yo + gy][xo + gx] = c
+
+    blit(base, 4, 0)
+    blit(wing, 4, 10 if hop else 11)
+    blit(legs, 4, 17)
     if tier == 2:
-        flame = ["....", "....", "....", "..F.", ".FGF", "FGF.", ".F..", "...."]
-        rows = [flame[i] + rows[i] for i in range(8)]
-    else:
-        rows = ["...." + r for r in rows]
-    # scale up: each sprite pixel becomes a scale x scale block
-    rows = ["".join(c * scale for c in r) for r in rows for _ in range(scale)]
+        blit(flame, 3, 7)
 
     def px(c):
         if c == ".":
             return None
-        return body if c == "B" else _PX.get(c, body)
+        return {"B": body, "D": dark}.get(c) or _PX.get(c, body)
 
-    width = max(len(r) for r in rows)
-    rows = [r.ljust(width, ".") for r in rows]
     out = []
-    for i in range(0, len(rows), 2):
-        top, bot = rows[i], rows[i + 1]
+    for y in range(0, H, 2):
         cells = []
-        for x in range(width):
-            u, lo = px(top[x]), px(bot[x])
+        for x in range(W):
+            u, lo = px(canvas[y][x]), px(canvas[y + 1][x])
             if u and lo:
                 cells.append(f"{_fg(u)}{_bg(lo)}\u2580{RESET}")
             elif u:
