@@ -33,29 +33,25 @@ above is the plain-text shape.)
 | `WK … 55%→109%` | 7-day rate limit: used now → projected at window end. |
 | `·2h13m` | Time until that window resets. |
 
-### The burn duck
+### The pace banner
 
-Classic rubber-duck debugging has you explain the bug to the duck. This duck
-explains the burn to you. The arrow (`used%→projected%`) and the duck come from
-projecting end-of-window usage from how much of the window has already elapsed
-(`used% × window / elapsed`). The faster you burn, the faster the duck runs:
+The metrics line ends with a pace banner that reads the same projection as the
+bars (`used% × window / elapsed`, taken from the window closest to its limit).
+It is a colored speed streak whose chevron count grows with pace, followed by a
+playful one-liner. Five lines per tier rotate, one every two minutes:
 
-| Marker | Projected end-of-window usage | Read as |
+| Banner | Projected end-of-window usage | Reads as |
 |---|---|---|
-| 🦆 | under 70% | strolling: comfortable headroom |
-| 🦆💨 | 70–99% | sprinting: tracking to spend most of the window |
-| 🦆🔥 | 100%+ | on fire: on track to hit the limit before reset |
+| blue `›` | under 70% | strolling: comfortable headroom |
+| yellow `››` | 70–99% | sprinting: tracking to spend most of the window |
+| red `›››` | 100%+ | on fire: on track to hit the limit before reset |
 
-The marker waddles a cell forward and back per refresh, at whatever cadence
-Claude Code re-runs the statusline (`refreshInterval` in your `statusLine`
-settings). Frame pairs are equal-width so the line never jitters.
+The on-fire banner shivers — a static bright/dim per-character buzz plus a
+one-cell horizontal jitter each refresh — the most "rapid" a once-per-second
+statusline can look. The blue and yellow banners are calm.
 
-Want the duck in full pixel-art glory? Run `/m-statusline:status` inside
-Claude Code: it renders a large half-block pixel duck colored by your current
-pace, plus both rate bars. The statusline caches its data on every refresh,
-so the command always reflects the latest numbers.
-
-The duck's pixel-art cousin lives on [milorad.io/m-statusline](https://milorad.io/m-statusline).
+The duck is alive and well on the web: the pixel-art burn duck lives on
+[milorad.io/m-statusline](https://milorad.io/m-statusline).
 
 ### Colors
 
@@ -83,7 +79,7 @@ Inside Claude Code:
 The setup command copies the bundled script to `~/.claude/m-statusline.py` and
 wires the `statusLine` block into `~/.claude/settings.json` (existing settings
 preserved, previous file backed up to `settings.json.bak`). Restart Claude Code
-and the duck starts running. Re-running setup is safe; it just refreshes the
+and the pace banner lights up. Re-running setup is safe; it just refreshes the
 script and the settings block.
 
 There are no packages. The script reads the
@@ -115,8 +111,10 @@ The dependency is one-way and optional.
 Everything tweakable lives near the top of `statusline.py`:
 
 - `BAR_WIDTH`: width of the usage bars in cells.
-- `color_for()`: the green / yellow / red thresholds.
-- `pace_emoji()`: the burn-duck pace thresholds.
+- `color_for()`: the bars' green / yellow / red thresholds.
+- `MESSAGES`: the five motivational lines per pace tier.
+- `pace_tier()`: the strolling / sprinting / on-fire cutoffs.
+- `ROTATE_SECONDS`: how often the message rotates (default 120).
 - `PIPELINE`: the list of `/m` phases to track.
 
 ## Requirements

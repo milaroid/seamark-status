@@ -5,12 +5,16 @@ Reads the statusLine stdin JSON (https://platform.claude.com/docs/en/statusline)
 and renders two lines:
 
   line 1 (identity): model  ·  m stage ◉◉◐○○ 2/5
-  line 2 (metrics):  CTX ████░░░░ 41%  ·  5H ██░░░░░░ 23%→41% ·2h13m  ·  WK …
+  line 2 (metrics):  CTX ████░░░░ 41%  ·  5H ██░░░░░░ 23%→41% ·2h13m  ·  WK …  · ›› pace yourself
 
 Usage bars are pace-aware: the 5-hour and weekly bars project end-of-window
 usage from how much of the window has already elapsed (used% x window/elapsed)
 and color themselves by that projection, so a green-looking 60% that is on
 track to blow past 100% reads red now instead of at reset time.
+
+The metrics line ends with a pace banner: a tier-colored speed streak (one
+chevron when strolling, two when sprinting, three when on fire) plus a playful
+motivational line. The on-fire banner shivers.
 """
 
 import json
@@ -83,122 +87,56 @@ def project(used, resets_at, window):
     return min(used * window / elapsed, 999)
 
 
-
-
 # ---------------------------------------------------------------------------
-# Inline pixel duck: a tiny half-block sprite (2 px tall, one text row) that
-# replaces a pace emoji next to each rate bar. Colored by that window's
-# projection; waddles a cell per refresh; grows a flame trail when on fire.
-_TIER_RGB = [(88, 164, 224), (224, 130, 60), (224, 70, 50)]  # stroll, sprint, fire
-_TIER_DARK = [(58, 118, 178), (178, 100, 46), (176, 54, 40)]
-_PX = {"L": (240, 150, 40), "F": (235, 95, 40), "G": (250, 200, 90),
-       "E": (10, 22, 42), "o": (240, 237, 225), "W": (252, 252, 246)}
-_BLANK = "\u2800"  # braille blank: empty but survives statusline line-trim
+# Pace banner: a tier-colored speed streak (chevron count = pace) plus a
+# playful motivational line, keyed to the worst rate-limit projection. Three
+# tiers: strolling (blue) < 70, sprinting (yellow) 70-99, on fire (red) 100+.
+# Five messages per tier, rotating one every two minutes. The on-fire banner
+# shivers: a static bright/dim per-character buzz plus a one-cell horizontal
+# jitter each refresh — the most "rapid" a once-per-second statusline can look.
+TIER_BLUE = "\033[38;2;90;165;225m"
+TIER_YELLOW = "\033[38;2;225;190;70m"
+TIER_RED = "\033[38;2;225;70;50m"
+TIER_RED_HOT = "\033[38;2;250;135;100m"  # buzz highlight for the shiver
+TIER_COLORS = (TIER_BLUE, TIER_YELLOW, TIER_RED)
+ROTATE_SECONDS = 120
+
+MESSAGES = (
+    ("cruisin'", "smooth sailing", "tank's full, go wild", "easy money",
+     "all systems chill"),
+    ("gettin' toasty", "ease off the gas", "mind the meter", "steady, tiger",
+     "pace yourself"),
+    ("she's gonna blow", "BRAKES. NOW.", "you're torching it", "mayday, mayday",
+     "smoke's pourin' out"),
+)
 
 
-def _fg(c):
-    return f"\033[38;2;{c[0]};{c[1]};{c[2]}m"
-
-
-def _bg(c):
-    return f"\033[48;2;{c[0]};{c[1]};{c[2]}m"
-
-
-CACHE = os.path.expanduser("~/.claude/m-statusline-last.json")
-
-
-def pace_emoji(proj):
-    """Burn-duck pace marker; the duck waddles a cell between refreshes.
-
-    Frame pairs are equal-width so the line never jitters.
-    """
+def pace_tier(proj):
+    """0 strolling (<70), 1 sprinting (70-99), 2 on fire (100+); None if unknown."""
     if proj is None:
+        return None
+    return 2 if proj >= 100 else 1 if proj >= 70 else 0
+
+
+def _shiver(text):
+    """Per-character bright/dim red buzz — looks like it vibrates in one frame."""
+    return "".join(
+        f"{TIER_RED_HOT if i % 2 else TIER_RED}{ch}" for i, ch in enumerate(text)
+    ) + RESET
+
+
+def pace_banner(worst):
+    """Tier-colored speed streak + rotating motivational line; shivers on fire."""
+    tier = pace_tier(worst)
+    if tier is None:
         return ""
-    hop = int(time.time()) % 2
-    if proj >= 100:
-        # duck on fire: on track to blow the limit before reset
-        return " 🦆🔥 " if hop else "🦆🔥  "
-    if proj >= 70:
-        # duck sprinting: tracking to spend most of the window
-        return " 🦆💨 " if hop else "🦆💨  "
-    # duck strolling: comfortable headroom
-    return " 🦆 " if hop else "🦆  "
-
-
-def big_duck_lines(proj):
-    """The big duck for /m-status: the full-resolution sprite from the
-    m-statusline web page (outline, wing, eye glint), rendered as half-block
-    pixel art. 20 pixel rows -> 10 text rows. Colored by pace, flame when on
-    fire. Returns [] when there is no projection to draw from.
-    """
-    if proj is None:
-        return []
-    tier = 2 if proj >= 100 else 1 if proj >= 70 else 0
-    body = _TIER_RGB[tier]
-    dark = _TIER_DARK[tier]
-    hop = int(time.time()) % 2
-
-    base = [
-        "              oooooo",
-        "             oBBBBBBo",
-        "            oBBBBBBBBo",
-        "            oBBBBBWEBo",
-        "            oBBBBBBBBooooo",
-        "            oBBBBBBBBoLLLLo",
-        "            oBBBBBBBBooooo",
-        "   oo       oBBBBBBBo",
-        "  oBBo      oBBBBBBo",
-        "  oBBBo    oBBBBBBBo",
-        "   oBBBo  oBBBBBBBBo",
-        "   oBBBBooBBBBBBBBBo",
-        "    oBBBBBBBBBBBBBBo",
-        "    oBBBBBBBBBBBBBBo",
-        "     oBBBBBBBBBBBBo",
-        "      oBBBBBBBBBBo",
-        "       oooooooooo",
-    ]
-    wing = ["            DDDD", "          DDDDDD", "          DDDDD"]
-    legs = (["         oL        oL", "        oLLo      oLLo"] if hop
-            else ["            oL  oL", "           oLLooLLo"])
-    flame = (["  F", " FGF", "FGGF", " FGF", "  F"] if hop
-             else [" F", "FGF", " FGGFF", "FGF", " F"])
-
-    # compose onto a 32x20 character canvas, same offsets as the web page
-    W, H = 32, 20
-    canvas = [["." for _ in range(W)] for _ in range(H)]
-
-    def blit(grid, xo, yo):
-        for gy, row in enumerate(grid):
-            for gx, c in enumerate(row):
-                if c != "." and c != " " and 0 <= yo + gy < H and 0 <= xo + gx < W:
-                    canvas[yo + gy][xo + gx] = c
-
-    blit(base, 4, 0)
-    blit(wing, 4, 10 if hop else 11)
-    blit(legs, 4, 17)
-    if tier == 2:
-        blit(flame, 3, 7)
-
-    def px(c):
-        if c == ".":
-            return None
-        return {"B": body, "D": dark}.get(c) or _PX.get(c, body)
-
-    out = []
-    for y in range(0, H, 2):
-        cells = []
-        for x in range(W):
-            u, lo = px(canvas[y][x]), px(canvas[y + 1][x])
-            if u and lo:
-                cells.append(f"{_fg(u)}{_bg(lo)}\u2580{RESET}")
-            elif u:
-                cells.append(f"{_fg(u)}\u2580{RESET}")
-            elif lo:
-                cells.append(f"{_fg(lo)}\u2584{RESET}")
-            else:
-                cells.append(" ")
-        out.append("".join(cells))
-    return out
+    streak = "›" * (tier + 1)
+    message = MESSAGES[tier][(int(time.time()) // ROTATE_SECONDS) % len(MESSAGES[tier])]
+    text = f"{streak} {message}"
+    if tier == 2:  # on fire: buzz the glyphs and jitter the whole banner a cell
+        jitter = " " if int(time.time()) % 2 else ""
+        return f"{jitter}{_shiver(text)}"
+    return f"{TIER_COLORS[tier]}{text}{RESET}"
 
 
 def limit_segment(label, obj, window):
@@ -214,8 +152,7 @@ def limit_segment(label, obj, window):
     else:
         pct = f"{col}{used:>3.0f}%{RESET}"
     arrow = f"{DIM}→{RESET}{col}{proj:.0f}%{RESET}" if proj is not None else ""
-    return (f"{DIM}{label}{RESET} {pace_emoji(proj)}{cells} "
-            f"{pct}{arrow}{humanize(resets)}")
+    return f"{DIM}{label}{RESET} {cells} {pct}{arrow}{humanize(resets)}"
 
 
 def ctx_segment(data):
@@ -290,14 +227,15 @@ def main():
     except (json.JSONDecodeError, ValueError):
         return
 
-    try:  # cache for /m-status (big-duck on demand)
-        with open(CACHE, "w") as fh:
-            json.dump(data, fh)
-    except OSError:
-        pass
-
     cwd = data.get("cwd") or (data.get("workspace") or {}).get("current_dir")
     limits = data.get("rate_limits") or {}
+    fh = limits.get("five_hour") or {}
+    sd = limits.get("seven_day") or {}
+    projections = [
+        project(fh.get("used_percentage"), fh.get("resets_at"), FIVE_HOUR),
+        project(sd.get("used_percentage"), sd.get("resets_at"), SEVEN_DAY),
+    ]
+    worst = max((p for p in projections if p is not None), default=None)
 
     identity = join([
         model_segment(data),
@@ -305,42 +243,16 @@ def main():
     ])
     metrics = join([
         ctx_segment(data),
-        limit_segment("5H", limits.get("five_hour"), FIVE_HOUR),
-        limit_segment("WK", limits.get("seven_day"), SEVEN_DAY),
+        limit_segment("5H", fh, FIVE_HOUR),
+        limit_segment("WK", sd, SEVEN_DAY),
     ])
+    banner = pace_banner(worst)
+    if banner:
+        metrics = f"{metrics}{SEP}{banner}"
 
     lines = [ln for ln in (identity, metrics) if ln]
     sys.stdout.write("\n".join(lines))
 
 
-
-
-def status_main():
-    """Render the big burn duck + rate bars from the cached statusline JSON."""
-    try:
-        with open(CACHE) as fh:
-            data = json.load(fh)
-    except (OSError, json.JSONDecodeError, ValueError):
-        print("no cached statusline data yet — open a Claude Code session first")
-        return
-    limits = data.get("rate_limits") or {}
-    fh_w = limits.get("five_hour") or {}
-    sd_w = limits.get("seven_day") or {}
-    projections = [
-        project(fh_w.get("used_percentage"), fh_w.get("resets_at"), FIVE_HOUR),
-        project(sd_w.get("used_percentage"), sd_w.get("resets_at"), SEVEN_DAY),
-    ]
-    worst = max((p for p in projections if p is not None), default=None)
-    label = ("on fire" if worst is not None and worst >= 100
-             else "sprinting" if worst is not None and worst >= 70
-             else "strolling" if worst is not None else "no data")
-    lines = [f"{DIM}the burn duck · {RESET}{CYAN}{label}{RESET}", ""]
-    lines += big_duck_lines(worst)
-    lines += ["",
-              limit_segment("5H", fh_w, FIVE_HOUR),
-              limit_segment("WK", sd_w, SEVEN_DAY)]
-    print("\n".join(lines))
-
-
 if __name__ == "__main__":
-    status_main() if "--status" in sys.argv else main()
+    main()
