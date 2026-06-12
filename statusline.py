@@ -38,15 +38,24 @@ FIVE_HOUR = 5 * 3600
 SEVEN_DAY = 7 * 86400
 
 
+LOAD_BLUE = "\033[38;2;90;165;225m"
+LOAD_GREEN = "\033[38;2;80;200;130m"
+LOAD_AMBER = "\033[38;2;225;190;70m"
+LOAD_RED = "\033[38;2;225;70;50m"
+
+
 def color_for(pct):
-    """Green under 50%, yellow 50-80%, red above 80%."""
+    """One load ladder for every field: blue < 50, green 50-70, amber 70-90,
+    red 90+. Rate bars feed it their projection, CTX its used value."""
     if pct is None:
         return DIM
-    if pct >= 80:
-        return RED
+    if pct >= 90:
+        return LOAD_RED
+    if pct >= 70:
+        return LOAD_AMBER
     if pct >= 50:
-        return YELLOW
-    return GREEN
+        return LOAD_GREEN
+    return LOAD_BLUE
 
 
 def bar_cells(pct, col):
@@ -175,10 +184,6 @@ def git_segment(info):
 # endurance when burning), colored to match, rotated every two minutes. Text follows the public-domain George Long
 # translation (1862), lightly modernized.
 ROTATE_SECONDS = 120
-TIER_BLUE = "\033[38;2;90;165;225m"
-TIER_YELLOW = "\033[38;2;225;190;70m"
-TIER_RED = "\033[38;2;225;70;50m"
-TIER_COLORS = (TIER_BLUE, TIER_YELLOW, TIER_RED)
 
 MEDITATIONS = (
     (  # strolling: presence
@@ -221,22 +226,17 @@ def meditation_line(five_hour):
         return None
     pool = MEDITATIONS[tier]
     quote = pool[(int(time.time()) // ROTATE_SECONDS) % len(pool)]
-    return f"{TIER_COLORS[tier]}— {quote}{RESET}"
+    return f"{color_for(proj)}— {quote}{RESET}"
 
 
 
-def limit_segment(label, obj, window, cool=GREEN):
-    """A pace-aware rate-limit bar: used% -> projected%, colored by projection.
-
-    `cool` is the color used below the warning thresholds; the 5-hour bar uses
-    the meditation blue so the whole 5H story reads in one palette."""
+def limit_segment(label, obj, window):
+    """A pace-aware rate-limit bar: used% -> projected%, colored by projection."""
     obj = obj or {}
     used = obj.get("used_percentage")
     resets = obj.get("resets_at")
     proj = project(used, resets, window)
     col = color_for(proj if proj is not None else used)
-    if col == GREEN:
-        col = cool
     cells = bar_cells(used, col)
     if used is None:
         pct = f"{DIM}--%{RESET}"
@@ -449,7 +449,7 @@ def main():
     cockpit = cockpit_line(m_dir, phase) if (m_dir and phase) else None
     metrics = join([
         ctx_segment(data),
-        limit_segment("5H", fh, FIVE_HOUR, cool=TIER_BLUE),
+        limit_segment("5H", fh, FIVE_HOUR),
         limit_segment("WK", sd, SEVEN_DAY),
     ])
     meditation = meditation_line(fh)
