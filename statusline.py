@@ -168,7 +168,9 @@ def duck_sprite_lines(worst):
             elif lo:
                 cells.append(f"{_fg(lo)}▄{RESET}")
             else:
-                cells.append(" ")
+                # U+2800 braille blank: renders empty but survives the
+                # per-line whitespace trim Claude Code applies to statuslines.
+                cells.append("\u2800")
         out.append("".join(cells))
     return out
 
