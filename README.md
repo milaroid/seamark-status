@@ -11,7 +11,7 @@ state the pipeline writes. Without m-pipeline it degrades to a clean model + git
 Single file. Python standard library only. No dependencies.
 
 ```
-Opus 4.8  ·  ⎇ feat/PIKO-142 ●3 ↑1  ·  PIKO-142
+Opus 4.8  ·  ⎇ feat/ENG-142 ●3 ↑1  ·  ENG-142
 m implement ◉◉◐○○ 2/5 ·12m  ·  tasks 4/6
 CTX ███░░░░░ 41%  ·  5H ██░░░░░░ 23%→41% ·2h13m  ·  WK ████░░░░ 76%→104% ·1d20h
 ```
@@ -27,7 +27,7 @@ plain-text shape.)
 |---|---|
 | `Opus 4.8` | Active model display name. |
 | `⎇ main ●3 ↑1` | Git branch, with `●` uncommitted count, `↑` commits ahead, `↓` behind. Shows the worktree name (`⌂name`) inside a worktree, a short SHA when detached, and nothing outside a repo. |
-| `PIKO-142` | Jira ticket captured from the branch via `.m/jira.yml` `branchPattern`. |
+| `ENG-142` | Jira ticket captured from the branch via `.m/jira.yml` `branchPattern`. |
 | `m ✗ last run BLOCKED` / `m idx stale 42d` | Idle pipeline alerts: shown only when the last run blocked or the index is stale. Silent otherwise. |
 
 **Pipeline cockpit (appears while `/m:develop` runs)**

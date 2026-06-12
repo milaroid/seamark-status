@@ -4,7 +4,7 @@
 Reads the statusLine stdin JSON (https://code.claude.com/docs/en/statusline)
 and renders:
 
-  line 1 (identity): model  ·  ⎇ branch ●3 ↑1  ·  PIKO-142
+  line 1 (identity): model  ·  ⎇ branch ●3 ↑1  ·  ENG-142
   cockpit (while /m:develop runs):
                      m implement ◉◉◐○○ 2/5 ·12m  ·  ☐2 ✓4  ·  ⚠2
   metrics:           CTX ████░░░░ 41%  ·  5H ██░░ 23%→41% ·2h13m  ·  WK …
