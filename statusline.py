@@ -92,12 +92,11 @@ def project(used, resets_at, window):
 # playful motivational line, keyed to the worst rate-limit projection. Three
 # tiers: strolling (blue) < 70, sprinting (yellow) 70-99, on fire (red) 100+.
 # Five messages per tier, rotating one every two minutes. The on-fire banner
-# shivers: a static bright/dim per-character buzz plus a one-cell horizontal
-# jitter each refresh — the most "rapid" a once-per-second statusline can look.
+# shivers: a one-cell horizontal jitter each refresh — the most "rapid" a
+# once-per-second statusline can look. The text stays a single solid color.
 TIER_BLUE = "\033[38;2;90;165;225m"
 TIER_YELLOW = "\033[38;2;225;190;70m"
 TIER_RED = "\033[38;2;225;70;50m"
-TIER_RED_HOT = "\033[38;2;250;135;100m"  # buzz highlight for the shiver
 TIER_COLORS = (TIER_BLUE, TIER_YELLOW, TIER_RED)
 ROTATE_SECONDS = 120
 
@@ -118,13 +117,6 @@ def pace_tier(proj):
     return 2 if proj >= 100 else 1 if proj >= 70 else 0
 
 
-def _shiver(text):
-    """Per-character bright/dim red buzz — looks like it vibrates in one frame."""
-    return "".join(
-        f"{TIER_RED_HOT if i % 2 else TIER_RED}{ch}" for i, ch in enumerate(text)
-    ) + RESET
-
-
 def pace_banner(worst):
     """Tier-colored speed streak + rotating motivational line; shivers on fire."""
     tier = pace_tier(worst)
@@ -133,10 +125,9 @@ def pace_banner(worst):
     streak = "›" * (tier + 1)
     message = MESSAGES[tier][(int(time.time()) // ROTATE_SECONDS) % len(MESSAGES[tier])]
     text = f"{streak} {message}"
-    if tier == 2:  # on fire: buzz the glyphs and jitter the whole banner a cell
-        jitter = " " if int(time.time()) % 2 else ""
-        return f"{jitter}{_shiver(text)}"
-    return f"{TIER_COLORS[tier]}{text}{RESET}"
+    # on fire: jitter the whole banner one cell each refresh; one solid color.
+    jitter = " " if tier == 2 and int(time.time()) % 2 else ""
+    return f"{jitter}{TIER_COLORS[tier]}{text}{RESET}"
 
 
 def limit_segment(label, obj, window):

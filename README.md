@@ -46,9 +46,9 @@ playful one-liner. Five lines per tier rotate, one every two minutes:
 | yellow `››` | 70–99% | sprinting: tracking to spend most of the window |
 | red `›››` | 100%+ | on fire: on track to hit the limit before reset |
 
-The on-fire banner shivers — a static bright/dim per-character buzz plus a
-one-cell horizontal jitter each refresh — the most "rapid" a once-per-second
-statusline can look. The blue and yellow banners are calm.
+The on-fire banner shivers — a one-cell horizontal jitter each refresh, the
+most "rapid" a once-per-second statusline can look. The text stays one solid
+color; the blue and yellow banners are calm.
 
 The duck is alive and well on the web: the pixel-art burn duck lives on
 [milorad.io/m-statusline](https://milorad.io/m-statusline).
