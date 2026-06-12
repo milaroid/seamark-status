@@ -84,14 +84,23 @@ def project(used, resets_at, window):
 
 
 def pace_emoji(proj):
-    """Burn-duck pace marker from projected end-of-window usage."""
+    """Burn-duck pace marker from projected end-of-window usage.
+
+    The duck hops a cell forward and back between statusline refreshes,
+    so it animates at whatever cadence Claude Code re-runs the script.
+    Frame pairs are equal-width to keep the line from jittering.
+    """
     if proj is None:
         return ""
+    hop = int(time.time() * 2) % 2
     if proj >= 100:
-        return "🦆🔥 "  # duck on fire: on track to blow the limit before reset
+        # duck on fire: on track to blow the limit before reset
+        return " 🦆🔥 " if hop else "🦆🔥  "
     if proj >= 70:
-        return "🦆💨 "  # duck sprinting: tracking to spend most of the window
-    return "🦆 "        # duck strolling: comfortable headroom
+        # duck sprinting: tracking to spend most of the window
+        return " 🦆💨 " if hop else "🦆💨  "
+    # duck strolling: comfortable headroom
+    return " 🦆 " if hop else "🦆  "
 
 
 def limit_segment(label, obj, window):

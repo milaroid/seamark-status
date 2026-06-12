@@ -45,7 +45,11 @@ The faster you burn, the faster the duck runs:
 | 🦆💨 | 70–99% | sprinting — tracking to spend most of the window |
 | 🦆🔥 | 100%+ | on fire — on track to hit the limit before reset |
 
-The duck's animated cousin lives on [milorad.io/m-statusline](https://milorad.io/m-statusline).
+The duck is animated: it hops a cell forward and back between refreshes, at
+whatever cadence Claude Code re-runs the statusline (`refreshInterval` in your
+`statusLine` settings). Frame pairs are equal-width so the line never jitters.
+
+The duck's pixel-art cousin lives on [milorad.io/m-statusline](https://milorad.io/m-statusline).
 
 ### Colors
 
