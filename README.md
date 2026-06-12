@@ -3,8 +3,7 @@
 The cockpit for the [`/m` pipeline](https://github.com/milorad-teodorovic/m-pipeline):
 a [Claude Code](https://claude.com/claude-code) statusline that shows the active
 model, your git branch and ticket, **pace-aware** usage bars that project where
-your 5-hour and weekly limits will land at reset, and a forecast of when you'll
-hit the limit at the current rate. While `/m:develop` runs, a cockpit line tracks
+your 5-hour and weekly limits will land at reset. While `/m:develop` runs, a cockpit line tracks
 the phase, its runtime, the task flow, and open blockers — live, from the `.m/`
 state the pipeline writes. Without m-pipeline it degrades to a clean model + git
 + usage statusline, but the cockpit is the point.
@@ -13,9 +12,8 @@ Single file. Python standard library only. No dependencies.
 
 ```
 Opus 4.8  ·  ⎇ feat/PIKO-142 ●3 ↑1  ·  PIKO-142
-m develop ◉◉◐○○ implement ·12m  ·  ☐2 ✓4  ·  ⚠2
+m implement ◉◉◐○○ 2/5 ·12m  ·  ☐2 ✓4  ·  ⚠2
 CTX ███░░░░░ 41%  ·  5H ██░░░░░░ 23%→41% ·2h13m  ·  WK ████░░░░ 76%→104% ·1d20h
-→ WK cap ~6h  ·  ›››toasty
 ```
 
 (In the terminal each segment is colored by load; the block above is the
@@ -30,13 +28,13 @@ plain-text shape.)
 | `Opus 4.8` | Active model display name. |
 | `⎇ main ●3 ↑1` | Git branch, with `●` uncommitted count, `↑` commits ahead, `↓` behind. Shows the worktree name (`⌂name`) inside a worktree, a short SHA when detached, and nothing outside a repo. |
 | `PIKO-142` | Jira ticket captured from the branch via `.m/jira.yml` `branchPattern`. |
-| `m ✓×5` / `m ✗ last run BLOCKED` / `m idx stale 42d` | Idle pipeline badge: a quiet streak of consecutive `PASSED` runs (from m-pipeline's learning signals), a loud alert when the last run blocked, or a stale-index warning. Only one shows, and only when the pipeline is idle. |
+| `m ✗ last run BLOCKED` / `m idx stale 42d` | Idle pipeline alerts: shown only when the last run blocked or the index is stale. Silent otherwise. |
 
 **Pipeline cockpit (appears while `/m:develop` runs)**
 
 | Segment | Meaning |
 |---|---|
-| `m develop ◉◉◐○○ implement ·12m` | Phase dots (`◉` done · `◐` current · `○` pending), the running phase, and how long it has been running (mtime of the phase marker). |
+| `m implement ◉◉◐○○ 2/5 ·12m` | Phase dots (`◉` done · `◐` current · `○` pending), the running phase, and how long it has been running (mtime of the phase marker). |
 | `loop 2/3 ·4 left` | The `/m:iterate` loop counter and remaining issues, parsed from `.m/PROGRESS.md`. Iterate phase only. |
 | `☐2 ✓4` | Active and completed tasks from `.m/TASKS.md`. |
 | `⚠2` | HIGH/CRITICAL findings still open in `.m/GAPS.md`. |
@@ -49,13 +47,6 @@ plain-text shape.)
 | `5H … 23%→41%` | 5-hour rate limit: used now → **projected** at window end. |
 | `WK … 76%→104%` | 7-day rate limit: used now → projected at window end. |
 | `·1d20h` | Time until that window resets. |
-
-**Line 3: forecast**
-
-| Segment | Meaning |
-|---|---|
-| `→ WK cap ~6h` | Forecast verdict. When a window is projected to blow its limit, this is the window and the time until you hit 100% at the current rate. Otherwise `clear`/`tight` with the soonest reset. |
-| `›››toasty` | A pace tag: a tier-colored speed streak (one chevron strolling, two sprinting, three on fire) and a one-word mood that rotates every two minutes. |
 
 The branch is read by running `git` in your working directory (the statusLine
 JSON carries no current-branch field) and is cached for a few seconds so the
@@ -120,9 +111,6 @@ Everything tweakable lives near the top of `statusline.py`:
 
 - `BAR_WIDTH`: width of the usage bars in cells.
 - `color_for()`: the bars' green / yellow / red thresholds.
-- `TAGS`: the one-word pace tags per tier.
-- `pace_tier()`: the strolling / sprinting / on-fire cutoffs.
-- `ROTATE_SECONDS`: how often the tag rotates (default 120).
 - `GIT_TTL`: how long git state is cached, in seconds (default 5).
 - `PIPELINE`: the list of `/m` phases to track.
 

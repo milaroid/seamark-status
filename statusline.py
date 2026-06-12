@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Claude Code statusline: model, git, /m stage, pace-aware usage, forecast.
+"""Claude Code statusline: the m-pipeline cockpit.
 
 Reads the statusLine stdin JSON (https://code.claude.com/docs/en/statusline)
-and renders three lines:
+and renders:
 
-  line 1 (identity): model  ·  ⎇ branch ●3 ↑1  ·  m stage ◉◉◐○○ 2/5
-  line 2 (metrics):  CTX ████░░░░ 41%  ·  5H ██░░ 23%→41% ·2h13m  ·  WK …
-  line 3 (forecast): → WK cap ~6h  ·  ›››toasty
+  line 1 (identity): model  ·  ⎇ branch ●3 ↑1  ·  PIKO-142
+  cockpit (while /m:develop runs):
+                     m implement ◉◉◐○○ 2/5 ·12m  ·  ☐2 ✓4  ·  ⚠2
+  metrics:           CTX ████░░░░ 41%  ·  5H ██░░ 23%→41% ·2h13m  ·  WK …
 
 Usage bars are pace-aware: the 5-hour and weekly bars project end-of-window
 usage from how much of the window has already elapsed (used% x window/elapsed)
 so a green-looking 60% that is on track to blow past 100% reads red now. The
-forecast line turns that projection into a verdict — time until you hit the
-limit at the current rate — plus a one-word pace tag.
+cockpit line is read live from the .m/ state files the /m pipeline writes.
 """
 
 import json
@@ -169,74 +169,6 @@ def git_segment(info):
     return head + ((" " + " ".join(extra)) if extra else "")
 
 
-# ---------------------------------------------------------------------------
-# Forecast line: a verdict (time until you hit a limit at the current rate)
-# plus a one-word pace tag. Three tiers: strolling (blue) < 70, sprinting
-# (yellow) 70-99, on fire (red) 100+. Tags rotate one every two minutes.
-TIER_BLUE = "\033[38;2;90;165;225m"
-TIER_YELLOW = "\033[38;2;225;190;70m"
-TIER_RED = "\033[38;2;225;70;50m"
-TIER_COLORS = (TIER_BLUE, TIER_YELLOW, TIER_RED)
-ROTATE_SECONDS = 120
-
-TAGS = (
-    ("chill", "cruisin", "breezy"),
-    ("pushing", "toasty", "warm"),
-    ("blazing", "cooked", "mayday"),
-)
-
-
-def pace_tier(proj):
-    """0 strolling (<70), 1 sprinting (70-99), 2 on fire (100+); None if unknown."""
-    if proj is None:
-        return None
-    return 2 if proj >= 100 else 1 if proj >= 70 else 0
-
-
-def pace_tag(tier):
-    """Tier-colored speed streak + one rotating word."""
-    word = TAGS[tier][(int(time.time()) // ROTATE_SECONDS) % len(TAGS[tier])]
-    return f"{TIER_COLORS[tier]}{'›' * (tier + 1)}{word}{RESET}"
-
-
-def forecast_line(windows):
-    """`→ <verdict> · ›››tag` from the worst projection, or None when no data."""
-    worst = None
-    soonest_cap = None     # (label, seconds-to-100%)
-    soonest_reset = None   # (label, seconds-to-reset)
-    for label, obj, window in windows:
-        obj = obj or {}
-        used = obj.get("used_percentage")
-        resets = obj.get("resets_at")
-        proj = project(used, resets, window)
-        if proj is None:
-            continue
-        worst = proj if worst is None else max(worst, proj)
-        if resets:
-            secs = int(resets) - time.time()
-            if soonest_reset is None or secs < soonest_reset[1]:
-                soonest_reset = (label, secs)
-            if proj >= 100 and used:
-                elapsed = window - secs
-                ttc = (100 - used) * elapsed / used
-                if soonest_cap is None or ttc < soonest_cap[1]:
-                    soonest_cap = (label, ttc)
-    tier = pace_tier(worst)
-    if tier is None:
-        return None
-    if soonest_cap:
-        verdict = (f"{TIER_RED}{soonest_cap[0]} cap ~"
-                   f"{humanize_secs(soonest_cap[1])}{RESET}")
-    elif soonest_reset:
-        col = TIER_YELLOW if tier == 1 else TIER_BLUE
-        word = "tight" if tier == 1 else "clear"
-        verdict = (f"{col}{word} · {soonest_reset[0]} resets "
-                   f"{humanize_secs(soonest_reset[1])}{RESET}")
-    else:
-        verdict = f"{TIER_COLORS[tier]}on pace{RESET}"
-    return f"{DIM}→{RESET} {verdict}{SEP}{pace_tag(tier)}"
-
-
 def limit_segment(label, obj, window):
     """A pace-aware rate-limit bar: used% -> projected%, colored by projection."""
     obj = obj or {}
@@ -390,11 +322,9 @@ def idle_badge(m_dir):
     stale = index_stale_days(m_dir)
     if stale is not None and stale >= STALE_DAYS:
         return f"{YELLOW}m idx stale {stale}d{RESET}"
-    verdict, streak = last_outcomes()
+    verdict, _ = last_outcomes()
     if verdict == "BLOCKED":
         return f"{RED}m ✗ last run BLOCKED{RESET}"
-    if verdict == "PASSED" and streak >= 2:
-        return f"{DIM}m ✓×{streak}{RESET}"
     return None
 
 
@@ -411,9 +341,11 @@ def cockpit_line(m_dir, phase):
             dots.append(f"{YELLOW}◐{RESET}")
         else:
             dots.append(f"{DIM}○{RESET}")
+    completed = sum(1 for ph in PIPELINE if done(ph))
     track = "".join(dots)
 
-    parts = [f"{DIM}m{RESET} {CYAN}develop{RESET} {track} {CYAN}{phase}{RESET}"]
+    parts = [f"{DIM}m{RESET} {CYAN}{phase}{RESET} {track} "
+             f"{DIM}{completed}/{len(PIPELINE)}{RESET}"]
     try:  # phase runtime from the -started marker's mtime
         started = os.path.getmtime(os.path.join(m_dir, f"phase-{phase}-started"))
         parts[0] += f" {DIM}·{humanize_secs(time.time() - started)}{RESET}"
@@ -467,9 +399,7 @@ def main():
         limit_segment("5H", fh, FIVE_HOUR),
         limit_segment("WK", sd, SEVEN_DAY),
     ])
-    forecast = forecast_line([("5H", fh, FIVE_HOUR), ("WK", sd, SEVEN_DAY)])
-
-    lines = [ln for ln in (identity, cockpit, metrics, forecast) if ln]
+    lines = [ln for ln in (identity, cockpit, metrics) if ln]
     sys.stdout.write("\n".join(lines))
 
 
