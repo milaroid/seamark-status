@@ -46,11 +46,14 @@ projecting end-of-window usage from how much of the window has already elapsed
 | 🦆💨 | 70–99% | sprinting: tracking to spend most of the window |
 | 🦆🔥 | 100%+ | on fire: on track to hit the limit before reset |
 
-In the terminal the marker is a tiny half-block pixel duck, not an emoji;
-the emoji above are stand-ins for the table. The duck is animated: it waddles
-a cell per refresh at whatever cadence Claude Code re-runs the statusline
-(`refreshInterval` in your `statusLine` settings), and grows a flame trail
-when a window is on fire.
+The marker waddles a cell forward and back per refresh, at whatever cadence
+Claude Code re-runs the statusline (`refreshInterval` in your `statusLine`
+settings). Frame pairs are equal-width so the line never jitters.
+
+Want the duck in full pixel-art glory? Run `/m-statusline:status` inside
+Claude Code: it renders a large half-block pixel duck colored by your current
+pace, plus both rate bars. The statusline caches its data on every refresh,
+so the command always reflects the latest numbers.
 
 The duck's pixel-art cousin lives on [milorad.io/m-statusline](https://milorad.io/m-statusline).
 

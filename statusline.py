@@ -102,12 +102,32 @@ def _bg(c):
     return f"\033[48;2;{c[0]};{c[1]};{c[2]}m"
 
 
-def pace_duck(proj):
-    """The burn duck: four statusline rows of half-block pixel art (8 px tall),
-    driven by the 5-hour window's projection. Smaller sizes stop reading as a
-    duck, so this is the one true terminal duck. Colored by pace, legs and
-    flame alternate per refresh, indented to sit under the 5H section.
-    Returns [] when there is no projection to show.
+CACHE = os.path.expanduser("~/.claude/m-statusline-last.json")
+
+
+def pace_emoji(proj):
+    """Burn-duck pace marker; the duck waddles a cell between refreshes.
+
+    Frame pairs are equal-width so the line never jitters.
+    """
+    if proj is None:
+        return ""
+    hop = int(time.time()) % 2
+    if proj >= 100:
+        # duck on fire: on track to blow the limit before reset
+        return " 🦆🔥 " if hop else "🦆🔥  "
+    if proj >= 70:
+        # duck sprinting: tracking to spend most of the window
+        return " 🦆💨 " if hop else "🦆💨  "
+    # duck strolling: comfortable headroom
+    return " 🦆 " if hop else "🦆  "
+
+
+def big_duck_lines(proj, scale=2):
+    """The big duck for /m-status: half-block pixel art at `scale`x.
+
+    8 sprite pixels tall -> 8*scale/2 text rows. Colored by pace, flame when
+    on fire. Returns [] when there is no projection to draw from.
     """
     if proj is None:
         return []
@@ -124,24 +144,25 @@ def pace_duck(proj):
         "....BBBBBBBB....",
         "......L....L...." if hop else ".......L..L.....",
     ]
-    if tier == 2:  # flame hugging the tail
+    if tier == 2:
         flame = ["....", "....", "....", "..F.", ".FGF", "FGF.", ".F..", "...."]
-        flame = flame if hop else ["....", "....", ".F..", "FGF.", ".FGF", "..F.", "....", "...."]
         rows = [flame[i] + rows[i] for i in range(8)]
     else:
         rows = ["...." + r for r in rows]
+    # scale up: each sprite pixel becomes a scale x scale block
+    rows = ["".join(c * scale for c in r) for r in rows for _ in range(scale)]
 
     def px(c):
         if c == ".":
             return None
         return body if c == "B" else _PX.get(c, body)
 
-    indent = _BLANK * 21  # park the duck under the 5H section
     width = max(len(r) for r in rows)
+    rows = [r.ljust(width, ".") for r in rows]
     out = []
-    for i in range(0, 8, 2):
-        top, bot = rows[i].ljust(width, "."), rows[i + 1].ljust(width, ".")
-        cells = [indent]
+    for i in range(0, len(rows), 2):
+        top, bot = rows[i], rows[i + 1]
+        cells = []
         for x in range(width):
             u, lo = px(top[x]), px(bot[x])
             if u and lo:
@@ -151,7 +172,7 @@ def pace_duck(proj):
             elif lo:
                 cells.append(f"{_fg(lo)}\u2584{RESET}")
             else:
-                cells.append(_BLANK)
+                cells.append(" ")
         out.append("".join(cells))
     return out
 
@@ -169,7 +190,7 @@ def limit_segment(label, obj, window):
     else:
         pct = f"{col}{used:>3.0f}%{RESET}"
     arrow = f"{DIM}→{RESET}{col}{proj:.0f}%{RESET}" if proj is not None else ""
-    return (f"{DIM}{label}{RESET} {cells} "
+    return (f"{DIM}{label}{RESET} {pace_emoji(proj)}{cells} "
             f"{pct}{arrow}{humanize(resets)}")
 
 
@@ -245,6 +266,12 @@ def main():
     except (json.JSONDecodeError, ValueError):
         return
 
+    try:  # cache for /m-status (big-duck on demand)
+        with open(CACHE, "w") as fh:
+            json.dump(data, fh)
+    except OSError:
+        pass
+
     cwd = data.get("cwd") or (data.get("workspace") or {}).get("current_dir")
     limits = data.get("rate_limits") or {}
 
@@ -258,12 +285,38 @@ def main():
         limit_segment("WK", limits.get("seven_day"), SEVEN_DAY),
     ])
 
-    fh = limits.get("five_hour") or {}
-    p5h = project(fh.get("used_percentage"), fh.get("resets_at"), FIVE_HOUR)
-
-    lines = [ln for ln in (identity, metrics) if ln] + pace_duck(p5h)
+    lines = [ln for ln in (identity, metrics) if ln]
     sys.stdout.write("\n".join(lines))
 
 
+
+
+def status_main():
+    """Render the big burn duck + rate bars from the cached statusline JSON."""
+    try:
+        with open(CACHE) as fh:
+            data = json.load(fh)
+    except (OSError, json.JSONDecodeError, ValueError):
+        print("no cached statusline data yet — open a Claude Code session first")
+        return
+    limits = data.get("rate_limits") or {}
+    fh_w = limits.get("five_hour") or {}
+    sd_w = limits.get("seven_day") or {}
+    projections = [
+        project(fh_w.get("used_percentage"), fh_w.get("resets_at"), FIVE_HOUR),
+        project(sd_w.get("used_percentage"), sd_w.get("resets_at"), SEVEN_DAY),
+    ]
+    worst = max((p for p in projections if p is not None), default=None)
+    label = ("on fire" if worst is not None and worst >= 100
+             else "sprinting" if worst is not None and worst >= 70
+             else "strolling" if worst is not None else "no data")
+    lines = [f"{DIM}the burn duck · {RESET}{CYAN}{label}{RESET}", ""]
+    lines += big_duck_lines(worst)
+    lines += ["",
+              limit_segment("5H", fh_w, FIVE_HOUR),
+              limit_segment("WK", sd_w, SEVEN_DAY)]
+    print("\n".join(lines))
+
+
 if __name__ == "__main__":
-    main()
+    status_main() if "--status" in sys.argv else main()
