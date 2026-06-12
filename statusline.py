@@ -83,48 +83,15 @@ def project(used, resets_at, window):
     return min(used * window / elapsed, 999)
 
 
-def pace_emoji(proj):
-    """Burn-duck pace marker from projected end-of-window usage.
-
-    The duck hops a cell forward and back between statusline refreshes,
-    so it animates at whatever cadence Claude Code re-runs the script.
-    Frame pairs are equal-width to keep the line from jittering.
-    """
-    if proj is None:
-        return ""
-    hop = int(time.time()) % 2
-    if proj >= 100:
-        # duck on fire: on track to blow the limit before reset
-        return " 🦆🔥 " if hop else "🦆🔥  "
-    if proj >= 70:
-        # duck sprinting: tracking to spend most of the window
-        return " 🦆💨 " if hop else "🦆💨  "
-    # duck strolling: comfortable headroom
-    return " 🦆 " if hop else "🦆  "
 
 
 # ---------------------------------------------------------------------------
-# Pixel duck: 4 extra statusline rows of half-block pixel art (2 px per cell).
-# Colored by the worst projection across windows; legs alternate per refresh,
-# flames when on fire. Set DUCK_SPRITE = False to hide the rows.
-DUCK_SPRITE = True
-
-_DUCK = [
-    "..........BBBB..",
-    ".........BBBEBLL",
-    "....B....BBBBB..",
-    "....BB..BBBBB...",
-    "...BBBBBBBBBB...",
-    "....BBBBBBBBB...",
-    ".....BBBBBBB....",
-]
-_LEGS = ["......L....L....", ".......L..L....."]
-_FLAME = [
-    ["...", "...", "...", "F..", "FF.", "F..", "...", "..."],
-    ["...", "...", ".F.", "FF.", "F..", ".F.", "...", "..."],
-]
+# Inline pixel duck: a tiny half-block sprite (2 px tall, one text row) that
+# replaces a pace emoji next to each rate bar. Colored by that window's
+# projection; waddles a cell per refresh; grows a flame trail when on fire.
 _TIER_RGB = [(88, 164, 224), (224, 130, 60), (224, 70, 50)]  # stroll, sprint, fire
-_PX = {"L": (240, 150, 40), "E": (10, 22, 42), "F": (235, 95, 40)}
+_PX = {"L": (240, 150, 40), "F": (235, 95, 40), "G": (250, 200, 90)}
+_BLANK = "\u2800"  # braille blank: empty but survives statusline line-trim
 
 
 def _fg(c):
@@ -135,44 +102,39 @@ def _bg(c):
     return f"\033[48;2;{c[0]};{c[1]};{c[2]}m"
 
 
-def duck_sprite_lines(worst):
-    """Half-block pixel duck colored by the worst projection; [] when hidden."""
-    if not DUCK_SPRITE or worst is None:
-        return []
-    tier = 2 if worst >= 100 else 1 if worst >= 70 else 0
+def pace_duck(proj):
+    """Tiny pixel duck colored and dressed by projected end-of-window usage."""
+    if proj is None:
+        return ""
+    tier = 2 if proj >= 100 else 1 if proj >= 70 else 0
     body = _TIER_RGB[tier]
-    frame = int(time.time()) % 2
-    rows = _DUCK + [_LEGS[frame]]
-    if tier == 2:
-        flame = _FLAME[frame]
-        rows = [flame[i] + rows[i] for i in range(8)]
-    else:
-        rows = ["..." + r for r in rows]
+    hop = int(time.time()) % 2
+    # 2-pixel-tall sprite rows: head+bill on top, body below.
+    top = "...BBL"
+    bot = "BBBBB."
+    if tier == 2:  # flame trail behind the tail
+        top, bot = ("G." + top, ".F" + bot) if hop else ("F." + top, ".G" + bot)
+    else:  # waddle: shift one cell per refresh
+        top, bot = (("." + top, "." + bot) if hop else (top + ".", bot + "."))
 
     def px(c):
-        if c in ". ":
+        if c == ".":
             return None
         return body if c == "B" else _PX.get(c, body)
 
-    out = []
-    for i in range(0, 8, 2):
-        top, bot = rows[i], rows[i + 1]
-        cells = []
-        for x in range(max(len(top), len(bot))):
-            u = px(top[x]) if x < len(top) else None
-            lo = px(bot[x]) if x < len(bot) else None
-            if u and lo:
-                cells.append(f"{_fg(u)}{_bg(lo)}▀{RESET}")
-            elif u:
-                cells.append(f"{_fg(u)}▀{RESET}")
-            elif lo:
-                cells.append(f"{_fg(lo)}▄{RESET}")
-            else:
-                # U+2800 braille blank: renders empty but survives the
-                # per-line whitespace trim Claude Code applies to statuslines.
-                cells.append("\u2800")
-        out.append("".join(cells))
-    return out
+    cells = []
+    for x in range(max(len(top), len(bot))):
+        u = px(top[x]) if x < len(top) else None
+        lo = px(bot[x]) if x < len(bot) else None
+        if u and lo:
+            cells.append(f"{_fg(u)}{_bg(lo)}\u2580{RESET}")
+        elif u:
+            cells.append(f"{_fg(u)}\u2580{RESET}")
+        elif lo:
+            cells.append(f"{_fg(lo)}\u2584{RESET}")
+        else:
+            cells.append(_BLANK)
+    return "".join(cells) + " "
 
 
 def limit_segment(label, obj, window):
@@ -188,7 +150,7 @@ def limit_segment(label, obj, window):
     else:
         pct = f"{col}{used:>3.0f}%{RESET}"
     arrow = f"{DIM}→{RESET}{col}{proj:.0f}%{RESET}" if proj is not None else ""
-    return (f"{DIM}{label}{RESET} {pace_emoji(proj)}{cells} "
+    return (f"{DIM}{label}{RESET} {pace_duck(proj)}{cells} "
             f"{pct}{arrow}{humanize(resets)}")
 
 
@@ -277,15 +239,7 @@ def main():
         limit_segment("WK", limits.get("seven_day"), SEVEN_DAY),
     ])
 
-    fh = limits.get("five_hour") or {}
-    sd = limits.get("seven_day") or {}
-    projections = [
-        project(fh.get("used_percentage"), fh.get("resets_at"), FIVE_HOUR),
-        project(sd.get("used_percentage"), sd.get("resets_at"), SEVEN_DAY),
-    ]
-    worst = max((p for p in projections if p is not None), default=None)
-
-    lines = [ln for ln in (identity, metrics) if ln] + duck_sprite_lines(worst)
+    lines = [ln for ln in (identity, metrics) if ln]
     sys.stdout.write("\n".join(lines))
 
 
