@@ -111,7 +111,7 @@ The dependency is one-way and optional.
 Everything tweakable lives near the top of `statusline.py`:
 
 - `BAR_WIDTH`: width of the usage bars in cells.
-- `color_for()`: the bars' green / yellow / red thresholds.
+- `color_for()`: the load-ladder thresholds (blue / green / amber / red).
 - `GIT_TTL`: how long git state is cached, in seconds (default 5).
 - `PIPELINE`: the list of `/m` phases to track.
 
