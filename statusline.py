@@ -84,7 +84,7 @@ def project(used, resets_at, window):
 
 
 def pace_emoji(proj):
-    """Pace marker from projected end-of-window usage (ccburn convention)."""
+    """Pace marker from projected end-of-window usage."""
     if proj is None:
         return ""
     if proj >= 100:

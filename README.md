@@ -1,4 +1,4 @@
-# claude-statusline
+# m-statusline
 
 A two-line [Claude Code](https://claude.com/claude-code) statusline that shows the
 active model, your `/m` pipeline stage, and **pace-aware** usage bars — bars that
@@ -62,7 +62,7 @@ The projection is suppressed for the first 2% of a window, where it is just nois
 1. Drop `statusline.py` somewhere stable, e.g. `~/.claude/statusline.py`:
 
    ```sh
-   curl -fsSL https://raw.githubusercontent.com/milorad-teodorovic/claude-statusline/main/statusline.py \
+   curl -fsSL https://raw.githubusercontent.com/milorad-teodorovic/m-statusline/main/statusline.py \
      -o ~/.claude/statusline.py
    ```
 
