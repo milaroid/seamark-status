@@ -30,7 +30,7 @@ if os.path.exists(settings_path):
 cfg["statusLine"] = {
     "type": "command",
     "command": "python3 ~/.claude/m-statusline.py",
-    "refreshInterval": 10,
+    "refreshInterval": 1,
 }
 
 with open(settings_path, "w") as fh:

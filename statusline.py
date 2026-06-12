@@ -92,7 +92,7 @@ def pace_emoji(proj):
     """
     if proj is None:
         return ""
-    hop = int(time.time() * 2) % 2
+    hop = int(time.time()) % 2
     if proj >= 100:
         # duck on fire: on track to blow the limit before reset
         return " 🦆🔥 " if hop else "🦆🔥  "
