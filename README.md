@@ -47,6 +47,18 @@ plain-text shape.)
 | `WK … 76%→104%` | 7-day rate limit: used now → projected at window end. |
 | `·1d20h` | Time until that window resets. |
 
+**Line 3: meditations**
+
+A line from Marcus Aurelius, *Meditations* ("To Myself"), in the public-domain
+George Long translation, lightly modernized. The quote pool and its color follow
+the 5-hour window's pace tier: presence when you're cool (blue), discipline when
+you're pushing (yellow), endurance when you're burning (red). Rotates every two
+minutes.
+
+```
+— Do every act as if it were your last.
+```
+
 The branch is read by running `git` in your working directory (the statusLine
 JSON carries no current-branch field) and is cached for a few seconds so the
 once-per-second refresh never spawns a subprocess storm.
