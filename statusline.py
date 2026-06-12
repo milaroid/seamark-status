@@ -90,7 +90,7 @@ def project(used, resets_at, window):
 # replaces a pace emoji next to each rate bar. Colored by that window's
 # projection; waddles a cell per refresh; grows a flame trail when on fire.
 _TIER_RGB = [(88, 164, 224), (224, 130, 60), (224, 70, 50)]  # stroll, sprint, fire
-_PX = {"L": (240, 150, 40), "F": (235, 95, 40), "G": (250, 200, 90)}
+_PX = {"L": (240, 150, 40), "F": (235, 95, 40), "G": (250, 200, 90), "E": (10, 22, 42)}
 _BLANK = "\u2800"  # braille blank: empty but survives statusline line-trim
 
 
@@ -103,38 +103,57 @@ def _bg(c):
 
 
 def pace_duck(proj):
-    """Tiny pixel duck colored and dressed by projected end-of-window usage."""
+    """The burn duck: four statusline rows of half-block pixel art (8 px tall),
+    driven by the 5-hour window's projection. Smaller sizes stop reading as a
+    duck, so this is the one true terminal duck. Colored by pace, legs and
+    flame alternate per refresh, indented to sit under the 5H section.
+    Returns [] when there is no projection to show.
+    """
     if proj is None:
-        return ""
+        return []
     tier = 2 if proj >= 100 else 1 if proj >= 70 else 0
     body = _TIER_RGB[tier]
     hop = int(time.time()) % 2
-    # 2-pixel-tall sprite rows: head+bill on top, body below.
-    top = "...BBL"
-    bot = "BBBBB."
-    if tier == 2:  # flame trail behind the tail
-        top, bot = ("G." + top, ".F" + bot) if hop else ("F." + top, ".G" + bot)
-    else:  # waddle: shift one cell per refresh
-        top, bot = (("." + top, "." + bot) if hop else (top + ".", bot + "."))
+    rows = [
+        "..........BBBB..",
+        ".........BBBBBB.",
+        ".........BEBBLLL",
+        "....B...BBBBB...",
+        "....BB.BBBBBB...",
+        "...BBBBBBBBBB...",
+        "....BBBBBBBB....",
+        "......L....L...." if hop else ".......L..L.....",
+    ]
+    if tier == 2:  # flame hugging the tail
+        flame = ["....", "....", "....", "..F.", ".FGF", "FGF.", ".F..", "...."]
+        flame = flame if hop else ["....", "....", ".F..", "FGF.", ".FGF", "..F.", "....", "...."]
+        rows = [flame[i] + rows[i] for i in range(8)]
+    else:
+        rows = ["...." + r for r in rows]
 
     def px(c):
         if c == ".":
             return None
         return body if c == "B" else _PX.get(c, body)
 
-    cells = []
-    for x in range(max(len(top), len(bot))):
-        u = px(top[x]) if x < len(top) else None
-        lo = px(bot[x]) if x < len(bot) else None
-        if u and lo:
-            cells.append(f"{_fg(u)}{_bg(lo)}\u2580{RESET}")
-        elif u:
-            cells.append(f"{_fg(u)}\u2580{RESET}")
-        elif lo:
-            cells.append(f"{_fg(lo)}\u2584{RESET}")
-        else:
-            cells.append(_BLANK)
-    return "".join(cells) + " "
+    indent = _BLANK * 21  # park the duck under the 5H section
+    width = max(len(r) for r in rows)
+    out = []
+    for i in range(0, 8, 2):
+        top, bot = rows[i].ljust(width, "."), rows[i + 1].ljust(width, ".")
+        cells = [indent]
+        for x in range(width):
+            u, lo = px(top[x]), px(bot[x])
+            if u and lo:
+                cells.append(f"{_fg(u)}{_bg(lo)}\u2580{RESET}")
+            elif u:
+                cells.append(f"{_fg(u)}\u2580{RESET}")
+            elif lo:
+                cells.append(f"{_fg(lo)}\u2584{RESET}")
+            else:
+                cells.append(_BLANK)
+        out.append("".join(cells))
+    return out
 
 
 def limit_segment(label, obj, window):
@@ -150,7 +169,7 @@ def limit_segment(label, obj, window):
     else:
         pct = f"{col}{used:>3.0f}%{RESET}"
     arrow = f"{DIM}→{RESET}{col}{proj:.0f}%{RESET}" if proj is not None else ""
-    return (f"{DIM}{label}{RESET} {pace_duck(proj)}{cells} "
+    return (f"{DIM}{label}{RESET} {cells} "
             f"{pct}{arrow}{humanize(resets)}")
 
 
@@ -239,7 +258,10 @@ def main():
         limit_segment("WK", limits.get("seven_day"), SEVEN_DAY),
     ])
 
-    lines = [ln for ln in (identity, metrics) if ln]
+    fh = limits.get("five_hour") or {}
+    p5h = project(fh.get("used_percentage"), fh.get("resets_at"), FIVE_HOUR)
+
+    lines = [ln for ln in (identity, metrics) if ln] + pace_duck(p5h)
     sys.stdout.write("\n".join(lines))
 
 
