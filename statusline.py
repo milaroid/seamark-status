@@ -103,6 +103,76 @@ def pace_emoji(proj):
     return " 🦆 " if hop else "🦆  "
 
 
+# ---------------------------------------------------------------------------
+# Pixel duck: 4 extra statusline rows of half-block pixel art (2 px per cell).
+# Colored by the worst projection across windows; legs alternate per refresh,
+# flames when on fire. Set DUCK_SPRITE = False to hide the rows.
+DUCK_SPRITE = True
+
+_DUCK = [
+    "..........BBBB..",
+    ".........BBBEBLL",
+    "....B....BBBBB..",
+    "....BB..BBBBB...",
+    "...BBBBBBBBBB...",
+    "....BBBBBBBBB...",
+    ".....BBBBBBB....",
+]
+_LEGS = ["......L....L....", ".......L..L....."]
+_FLAME = [
+    ["...", "...", "...", "F..", "FF.", "F..", "...", "..."],
+    ["...", "...", ".F.", "FF.", "F..", ".F.", "...", "..."],
+]
+_TIER_RGB = [(88, 164, 224), (224, 130, 60), (224, 70, 50)]  # stroll, sprint, fire
+_PX = {"L": (240, 150, 40), "E": (10, 22, 42), "F": (235, 95, 40)}
+
+
+def _fg(c):
+    return f"\033[38;2;{c[0]};{c[1]};{c[2]}m"
+
+
+def _bg(c):
+    return f"\033[48;2;{c[0]};{c[1]};{c[2]}m"
+
+
+def duck_sprite_lines(worst):
+    """Half-block pixel duck colored by the worst projection; [] when hidden."""
+    if not DUCK_SPRITE or worst is None:
+        return []
+    tier = 2 if worst >= 100 else 1 if worst >= 70 else 0
+    body = _TIER_RGB[tier]
+    frame = int(time.time()) % 2
+    rows = _DUCK + [_LEGS[frame]]
+    if tier == 2:
+        flame = _FLAME[frame]
+        rows = [flame[i] + rows[i] for i in range(8)]
+    else:
+        rows = ["..." + r for r in rows]
+
+    def px(c):
+        if c in ". ":
+            return None
+        return body if c == "B" else _PX.get(c, body)
+
+    out = []
+    for i in range(0, 8, 2):
+        top, bot = rows[i], rows[i + 1]
+        cells = []
+        for x in range(max(len(top), len(bot))):
+            u = px(top[x]) if x < len(top) else None
+            lo = px(bot[x]) if x < len(bot) else None
+            if u and lo:
+                cells.append(f"{_fg(u)}{_bg(lo)}▀{RESET}")
+            elif u:
+                cells.append(f"{_fg(u)}▀{RESET}")
+            elif lo:
+                cells.append(f"{_fg(lo)}▄{RESET}")
+            else:
+                cells.append(" ")
+        out.append("".join(cells))
+    return out
+
+
 def limit_segment(label, obj, window):
     """A pace-aware rate-limit bar: used% -> projected%, colored by projection."""
     obj = obj or {}
@@ -205,7 +275,15 @@ def main():
         limit_segment("WK", limits.get("seven_day"), SEVEN_DAY),
     ])
 
-    lines = [ln for ln in (identity, metrics) if ln]
+    fh = limits.get("five_hour") or {}
+    sd = limits.get("seven_day") or {}
+    projections = [
+        project(fh.get("used_percentage"), fh.get("resets_at"), FIVE_HOUR),
+        project(sd.get("used_percentage"), sd.get("resets_at"), SEVEN_DAY),
+    ]
+    worst = max((p for p in projections if p is not None), default=None)
+
+    lines = [ln for ln in (identity, metrics) if ln] + duck_sprite_lines(worst)
     sys.stdout.write("\n".join(lines))
 
 
