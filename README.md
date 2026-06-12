@@ -1,7 +1,7 @@
 # m-statusline
 
 A two-line [Claude Code](https://claude.com/claude-code) statusline that shows the
-active model, your `/m` pipeline stage, and **pace-aware** usage bars — bars that
+active model, your `/m` pipeline stage, and **pace-aware** usage bars that
 project where your 5-hour and weekly limits will land at reset, so an innocent-looking
 60% that is on track to blow past 100% reads red *now* instead of at reset time.
 
@@ -12,19 +12,19 @@ Opus 4.8  ·  m implement ◉◉◐○○ 2/5
 CTX ███░░░░░ 41%  ·  5H 🦆 ██░░░░░░ 23%→41% ·2h13m  ·  WK 🦆🔥 ████░░░░ 55%→109% ·3d11h
 ```
 
-(In the terminal each segment is colored — green / yellow / red by load. The block
+(In the terminal each segment is colored green / yellow / red by load. The block
 above is the plain-text shape.)
 
 ## What each segment means
 
-**Line 1 — identity**
+**Line 1: identity**
 
 | Segment | Meaning |
 |---|---|
 | `Opus 4.8` | Active model display name. |
 | `m implement ◉◉◐○○ 2/5` | Current `/m:develop` phase and progress across the pipeline. `◉` done · `◐` current · `○` pending. Hidden entirely when you are not inside an active `/m:develop` run. |
 
-**Line 2 — metrics**
+**Line 2: metrics**
 
 | Segment | Meaning |
 |---|---|
@@ -41,9 +41,9 @@ The faster you burn, the faster the duck runs:
 
 | Marker | Projected end-of-window usage | Read as |
 |---|---|---|
-| 🦆 | under 70% | strolling — comfortable headroom |
-| 🦆💨 | 70–99% | sprinting — tracking to spend most of the window |
-| 🦆🔥 | 100%+ | on fire — on track to hit the limit before reset |
+| 🦆 | under 70% | strolling: comfortable headroom |
+| 🦆💨 | 70–99% | sprinting: tracking to spend most of the window |
+| 🦆🔥 | 100%+ | on fire: on track to hit the limit before reset |
 
 The duck is animated: it hops a cell forward and back between refreshes, at
 whatever cadence Claude Code re-runs the statusline (`refreshInterval` in your
@@ -53,7 +53,7 @@ The duck's pixel-art cousin lives on [milorad.io/m-statusline](https://milorad.i
 
 ### Colors
 
-Each bar and percentage is colored by load — for the rate-limit bars, by the
+Each bar and percentage is colored by load. The rate-limit bars follow the
 **projection**, not the raw used value:
 
 | Color | Threshold |
@@ -66,9 +66,25 @@ The projection is suppressed for the first 2% of a window, where it is just nois
 
 ## Install
 
-One line — downloads the script to `~/.claude/m-statusline.py` and wires the
-`statusLine` block into `~/.claude/settings.json` (your existing settings are
-preserved and backed up to `settings.json.bak` first):
+### Claude Code plugin (recommended)
+
+Inside Claude Code:
+
+```
+/plugin marketplace add milorad-teodorovic/m-statusline
+/plugin install m-statusline@m-statusline
+/m-statusline:setup
+```
+
+The setup command copies the bundled script to `~/.claude/m-statusline.py` and
+wires the `statusLine` block into `~/.claude/settings.json` (existing settings
+preserved, previous file backed up to `settings.json.bak`). Restart Claude Code
+and the duck starts running.
+
+### One-line installer
+
+Same effect without the plugin system: downloads the script and wires
+`settings.json` for you:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/milorad-teodorovic/m-statusline/main/install.sh | bash
@@ -82,12 +98,12 @@ less install.sh && bash install.sh
 ```
 
 Restart Claude Code (or start a new session) and the duck starts running.
-Re-running the installer is safe — it just refreshes the script and the
+Re-running the installer is safe; it just refreshes the script and the
 settings block.
 
 ### Manual install
 
-No installer, no magic — two steps:
+No installer, two steps:
 
 1. Drop `statusline.py` somewhere stable, e.g. `~/.claude/m-statusline.py`:
 
@@ -108,7 +124,7 @@ No installer, no magic — two steps:
    }
    ```
 
-Either way there are no packages — the script reads the
+Either way there are no packages. The script reads the
 [statusLine stdin JSON](https://platform.claude.com/docs/en/statusline) Claude Code
 feeds it and writes the two lines back.
 
@@ -129,17 +145,17 @@ refine → plan → implement → review → iterate
 
 This is the convention used by the
 [`/m` pipeline](https://github.com/milorad-teodorovic/m-pipeline). If you do not use
-it, the segment simply never appears and the rest of the statusline works unchanged —
-the dependency is one-way and optional.
+it, the segment simply never appears and the rest of the statusline works unchanged.
+The dependency is one-way and optional.
 
 ## Customizing
 
 Everything tweakable lives near the top of `statusline.py`:
 
-- `BAR_WIDTH` — width of the usage bars in cells.
-- `color_for()` — the green / yellow / red thresholds.
-- `pace_emoji()` — the 🧊 / 🔥 / 🚨 thresholds.
-- `PIPELINE` — the list of `/m` phases to track.
+- `BAR_WIDTH`: width of the usage bars in cells.
+- `color_for()`: the green / yellow / red thresholds.
+- `pace_emoji()`: the burn-duck pace thresholds.
+- `PIPELINE`: the list of `/m` phases to track.
 
 ## Requirements
 
@@ -148,4 +164,4 @@ Everything tweakable lives near the top of `statusline.py`:
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).

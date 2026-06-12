@@ -1,0 +1,10 @@
+{
+  "name": "m-statusline",
+  "description": "Two-line Claude Code statusline: active model, /m pipeline stage, and pace-aware usage bars with an animated burn duck (🦆 strolling, 🦆💨 sprinting, 🦆🔥 on fire). Single Python file, stdlib only. Run /m-statusline:setup once to wire it into settings.json.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Milorad Teodorovic",
+    "email": "milorad.teodorovic11@gmail.com"
+  },
+  "commands": "./commands"
+}
