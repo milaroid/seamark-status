@@ -179,58 +179,82 @@ def git_segment(info):
 
 
 # ---------------------------------------------------------------------------
-# "To Himself" line: a quiet Marcus Aurelius quote under the metrics, picked by
-# the 5-hour window's pace tier (presence when chill, discipline when pushing,
-# endurance when burning), rotated every two minutes. Text follows the
-# public-domain George Long translation (1862), lightly modernized.
-# Rendered in Tyrian (imperial) purple — the dye Roman law reserved for the
-# emperor. Marcus wrote these notes to himself while ruling, so his private
-# lines wear the one color only an emperor could.
+# "To Himself" line: a Marcus Aurelius quote under the metrics, chosen by the
+# 5-hour window's load and colored to match its bar — a Stoic arc that climbs
+# with the burn: Start (blue) when light, Center (green) when steady, Strive
+# (yellow) when pushing, Endure (red) when redlined. Rotated every two minutes.
+# Text follows the public-domain George Long translation (1862), modernized.
 ROTATE_SECONDS = 120
-IMPERIAL = "\033[38;2;170;105;195m"
 
 MEDITATIONS = (
-    (  # strolling: presence
+    (  # Start — blue: begin, act now, mortality spurs the work
         "Confine yourself to the present.",
-        "Look within; within is the fountain of good.",
-        "The soul is dyed by its thoughts.",
-        "Very little is needed to make a happy life.",
+        "Do every act as if it were your last.",
+        "No longer talk of what a good man should be. Be one.",
+        "Death hangs over you; while you can, be good.",
+        "Do not act as if you had ten thousand years to live.",
+        "Whatever you do, do it as one who may depart at any moment.",
+        "Remember how long you have put these things off.",
+        "You may leave life this moment; let that govern what you do.",
+        "The time any man lives is but a little.",
         "Let no act be done without purpose.",
     ),
-    (  # sprinting: discipline
-        "Do every act as if it were your last.",
-        "No longer talk about what a good man should be. Be one.",
-        "Do not waste what remains of life on thoughts about others.",
+    (  # Center — green: the inner retreat, calm, contentment
+        "Nowhere can a man retreat better than into his own soul.",
+        "Look within; within is the fountain of good.",
+        "Whenever you wish, you can retire into yourself and be at rest.",
+        "The soul is dyed by its thoughts.",
+        "Very little is needed to make a happy life.",
+        "Tranquility is nothing but the good ordering of the mind.",
+        "Be cheerful, and need no one's help.",
+        "Keep yourself pure from passion, rashness, and vanity.",
+        "Be never in haste, and never slow.",
+        "What suits you, O Universe, suits me.",
+    ),
+    (  # Strive — yellow: right action, the path, persistence
+        "Always take the short road; the short road is nature's.",
         "If it is not right, do not do it; if it is not true, do not say it.",
+        "The art of living is more like wrestling than dancing.",
+        "Do nothing at random, but by the exact rules of the art.",
+        "Do what you are about with gravity, freedom, and justice.",
+        "The best revenge is not to become like your enemy.",
+        "A happy lot: good inclinations, good desires, good actions.",
+        "Does a man offend? It is against himself that he offends.",
+        "The obstacle on the road becomes the road.",
         "Take refuge in work, and be at rest.",
     ),
-    (  # on fire: endurance
-        "You may depart from life this very moment; act accordingly.",
-        "Be like the promontory: the waves break against it and it stands.",
-        "Nothing happens to anyone that he cannot bear.",
-        "The obstacle on the road helps us along the road.",
+    (  # Endure — red: bear it, impermanence, accept what comes
+        "Be like the headland the waves break on; it stands, the sea falls still.",
+        "Nothing happens to anyone that he is not formed by nature to bear.",
+        "Whatever happens in the world happens justly.",
+        "Take away the opinion, and the hurt is gone.",
+        "Nothing that is according to nature can be evil.",
+        "The universe is change; life is what our thoughts make it.",
+        "You have boarded, you have sailed, you have reached the shore. Step off.",
+        "In a little while you and he will both be dead.",
+        "Consider how quickly all things dissolve into the whole.",
         "Time is a river of passing events; strong is its current.",
     ),
 )
 
 
-def pace_tier(proj):
-    """0 strolling (<70), 1 sprinting (70-99), 2 on fire (100+); None if unknown."""
+def quote_tier(proj):
+    """Load-ladder bucket for the quote: 0 <50, 1 <70, 2 <90, 3 otherwise."""
     if proj is None:
         return None
-    return 2 if proj >= 100 else 1 if proj >= 70 else 0
+    return 3 if proj >= 90 else 2 if proj >= 70 else 1 if proj >= 50 else 0
 
 
 def meditation_line(five_hour):
-    """A Marcus Aurelius line chosen by the 5-hour pace, in imperial purple."""
+    """A Marcus Aurelius line chosen by, and colored to, the 5-hour load."""
     obj = five_hour or {}
     proj = project(obj.get("used_percentage"), obj.get("resets_at"), FIVE_HOUR)
-    tier = pace_tier(proj)
+    tier = quote_tier(proj)
     if tier is None:
         return None
     pool = MEDITATIONS[tier]
     quote = pool[(int(time.time()) // ROTATE_SECONDS) % len(pool)]
-    return f"{IMPERIAL}\033[3mTo Himself\033[23m: {quote}{RESET}"
+    return f"{color_for(proj)}\033[3mTo Himself\033[23m: {quote}{RESET}"
 
 
 
