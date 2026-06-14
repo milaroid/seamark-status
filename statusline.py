@@ -179,11 +179,15 @@ def git_segment(info):
 
 
 # ---------------------------------------------------------------------------
-# Meditations line: a quiet Marcus Aurelius quote under the metrics, picked by
-# the 5-hour window's pace tier (calm when chill, discipline when pushing,
-# endurance when burning), colored to match, rotated every two minutes. Text follows the public-domain George Long
-# translation (1862), lightly modernized.
+# "To Himself" line: a quiet Marcus Aurelius quote under the metrics, picked by
+# the 5-hour window's pace tier (presence when chill, discipline when pushing,
+# endurance when burning), rotated every two minutes. Text follows the
+# public-domain George Long translation (1862), lightly modernized.
+# Rendered in Tyrian (imperial) purple — the dye Roman law reserved for the
+# emperor. Marcus wrote these notes to himself while ruling, so his private
+# lines wear the one color only an emperor could.
 ROTATE_SECONDS = 120
+IMPERIAL = "\033[38;2;170;105;195m"
 
 MEDITATIONS = (
     (  # strolling: presence
@@ -218,7 +222,7 @@ def pace_tier(proj):
 
 
 def meditation_line(five_hour):
-    """An Aurelius line picked by and colored to the 5-hour projection."""
+    """A Marcus Aurelius line chosen by the 5-hour pace, in imperial purple."""
     obj = five_hour or {}
     proj = project(obj.get("used_percentage"), obj.get("resets_at"), FIVE_HOUR)
     tier = pace_tier(proj)
@@ -226,7 +230,7 @@ def meditation_line(five_hour):
         return None
     pool = MEDITATIONS[tier]
     quote = pool[(int(time.time()) // ROTATE_SECONDS) % len(pool)]
-    return f"{color_for(proj)}\033[3mMeditations\033[23m: {quote}{RESET}"
+    return f"{IMPERIAL}\033[3mTo Himself\033[23m: {quote}{RESET}"
 
 
 
