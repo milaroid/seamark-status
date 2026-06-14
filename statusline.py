@@ -226,7 +226,7 @@ def meditation_line(five_hour):
         return None
     pool = MEDITATIONS[tier]
     quote = pool[(int(time.time()) // ROTATE_SECONDS) % len(pool)]
-    return f"{color_for(proj)}— {quote}{RESET}"
+    return f"{color_for(proj)}\033[3mMeditations\033[23m: {quote}{RESET}"
 
 
 
