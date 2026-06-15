@@ -36,12 +36,16 @@ SEP = f"{DIM}  ·  {RESET}"
 PIPELINE = ["refine", "plan", "implement", "review", "iterate"]
 FIVE_HOUR = 5 * 3600
 SEVEN_DAY = 7 * 86400
+CODEX_FRESH_TTL = 6 * 3600  # hide the Codex row when no run within this window
 
 
 LOAD_BLUE = "\033[38;2;90;165;225m"
 LOAD_GREEN = "\033[38;2;80;200;130m"
 LOAD_AMBER = "\033[38;2;225;190;70m"
 LOAD_RED = "\033[38;2;225;70;50m"
+
+CLAUDE_ORANGE = "\033[38;2;230;125;34m"   # #E67D22 — Claude row label
+CODEX_WHITE = "\033[38;2;255;255;255m"    # Codex row label
 
 
 def color_for(pct):
@@ -281,11 +285,6 @@ def ctx_segment(data):
     return f"{DIM}CTX{RESET} {bar_cells(pct, col)} {val}"
 
 
-def model_segment(data):
-    name = (data.get("model") or {}).get("display_name")
-    return f"{CYAN}{name}{RESET}" if name else None
-
-
 # ---------------------------------------------------------------------------
 # /m pipeline cockpit. m-statusline is the m-pipeline instrument panel: while
 # /m:develop runs, a cockpit line shows the phase dots, the running phase and
@@ -400,6 +399,152 @@ def index_stale_days(m_dir):
     return int(age // 86400)
 
 
+def _read_int(path):
+    """First integer in a file (the codex meter holds one number), or None."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return int(fh.read().strip() or 0)
+    except (OSError, ValueError):
+        return None
+
+
+def codex_budget(m_dir):
+    """token_budget from the .m/pipeline.yml codex: block, default 200000."""
+    in_codex = False
+    for raw in _read(os.path.join(m_dir, "pipeline.yml")).splitlines():
+        stripped = raw.strip()
+        if not in_codex:
+            if stripped.startswith("codex:"):
+                in_codex = True
+            continue
+        if stripped and not raw[:1].isspace():  # dedent to a top-level key ends the block
+            break
+        if stripped.startswith("token_budget:"):
+            try:
+                return int(stripped.split(":", 1)[1].split("#")[0].strip())
+            except ValueError:
+                return 200000
+    return 200000
+
+
+def humanize_tokens(n):
+    """Compact token count like 45k / 1.4M."""
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1000:
+        return f"{n / 1000:.0f}k"
+    return str(n)
+
+
+def codex_segment(m_dir):
+    """Live Codex token burn: .m/handoff/codex-meter.txt vs the per-run budget.
+
+    The meter file exists only while a /m Codex pass (plan/research/review) is
+    burning tokens — the pipeline cleans it up at the end of every run — so the
+    gauge appears during dual-engine work and stays quiet otherwise."""
+    if not m_dir:
+        return None
+    used = _read_int(os.path.join(m_dir, "handoff", "codex-meter.txt"))
+    if not used:  # absent or zero -> no burn to show
+        return None
+    budget = codex_budget(m_dir) or 200000
+    pct = min(100.0, used / budget * 100) if budget else 0.0
+    col = color_for(pct)
+    return (f"{DIM}burn{RESET} {bar_cells(pct, col)} "
+            f"{col}{humanize_tokens(used)}/{humanize_tokens(budget)}{RESET}")
+
+
+# ---------------------------------------------------------------------------
+# Codex account usage: the metered helper persists the real rate_limits the
+# Codex API returns on each run to ~/.claude/.codex-limits.json. Codex reports
+# two windows like Claude (a 5-hour primary and a weekly secondary, keyed by
+# window_minutes), so the codex row mirrors the Claude 5H/WK bars. The snapshot
+# only refreshes when a Codex run happens; between runs it shows last-known.
+CODEX_LIMITS = os.path.expanduser("~/.claude/.codex-limits.json")
+
+
+def codex_limits():
+    """Last-known Codex rate_limits snapshot {model, ts, rate_limits}, or None."""
+    try:
+        with open(CODEX_LIMITS, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, json.JSONDecodeError, ValueError):
+        return None
+
+
+def codex_window_label(mins):
+    """Map a Codex window length to the Claude-style label (300->5H, 10080->WK)."""
+    if not mins:
+        return "·"
+    if mins == 300:
+        return "5H"
+    if mins == 10080:
+        return "WK"
+    if mins % 1440 == 0:
+        return f"{mins // 1440}D"
+    return f"{mins // 60}H"
+
+
+def codex_limit_segment(window):
+    """A Codex usage bar: used% colored by load, with a reset countdown."""
+    used = window.get("used_percent")
+    label = codex_window_label(window.get("window_minutes"))
+    col = color_for(used)
+    pct = f"{DIM}--%{RESET}" if used is None else f"{col}{used:>3.0f}%{RESET}"
+    return f"{DIM}{label}{RESET} {bar_cells(used, col)} {pct}{humanize(window.get('resets_at'))}"
+
+
+def codex_usage_segments(snap):
+    """The 5H/WK Codex usage bars from the snapshot, mirroring the Claude row."""
+    rl = (snap or {}).get("rate_limits") or {}
+    out = []
+    for key in ("primary", "secondary"):
+        window = rl.get(key)
+        if window and window.get("used_percent") is not None:
+            out.append(codex_limit_segment(window))
+    return out
+
+
+def codex_model_name(snap):
+    """Codex model: the snapshot's model, else the global config.toml default."""
+    if snap and snap.get("model"):
+        return snap["model"]
+    for line in _read(os.path.expanduser("~/.codex/config.toml")).splitlines():
+        stripped = line.strip()
+        if stripped.startswith("model") and "=" in stripped and "reasoning" not in stripped:
+            return stripped.split("=", 1)[1].strip().strip("\"'")
+    return "codex"
+
+
+def codex_effort(snap):
+    """Codex reasoning effort: the snapshot's, else config.toml model_reasoning_effort."""
+    if snap and snap.get("effort"):
+        return snap["effort"]
+    for line in _read(os.path.expanduser("~/.codex/config.toml")).splitlines():
+        stripped = line.strip()
+        if stripped.startswith("model_reasoning_effort") and "=" in stripped:
+            return stripped.split("=", 1)[1].strip().strip("\"'")
+    return None
+
+
+def claude_effort():
+    """Claude reasoning effort from ~/.claude/settings.json effortLevel, or None."""
+    try:
+        with open(os.path.expanduser("~/.claude/settings.json"), encoding="utf-8") as fh:
+            return (json.load(fh) or {}).get("effortLevel")
+    except (OSError, json.JSONDecodeError, ValueError):
+        return None
+
+
+def model_row(name, effort, width, parts, color=DIM):
+    """A metrics row: 'model · effort' in one brand color, padded to align."""
+    body = join([p for p in parts if p])
+    if not body:
+        return None
+    label = (name or "?") + (f" · {effort}" if effort else "")
+    return f"{color}{label}{RESET}{' ' * max(0, width - len(label))}  {body}"
+
+
 def idle_badge(m_dir):
     """Quiet idle summary: alerts loudly, brags softly, says nothing otherwise."""
     stale = index_stale_days(m_dir)
@@ -469,20 +614,38 @@ def main():
 
     ticket = jira_key(m_dir, git["branch"]) if (m_dir and git) else None
     identity = join([
-        model_segment(data),
         git_segment(git),
         f"{DIM}{ticket}{RESET}" if ticket else None,
         idle_badge(m_dir) if (m_dir and not phase) else None,
     ])
     cockpit = cockpit_line(m_dir, phase) if (m_dir and phase) else None
-    metrics = join([
+    # Two aligned, model-labeled usage rows: Claude (CTX/5H/WK) and, when a
+    # Codex run has left a snapshot or a live burn meter, Codex (5H/WK/burn).
+    claude_model = (data.get("model") or {}).get("display_name") or "claude"
+    cl_eff = claude_effort()
+    snap = codex_limits()
+    fresh = bool(snap) and (time.time() - snap.get("ts", 0)) < CODEX_FRESH_TTL
+    burn = codex_segment(m_dir)
+    codex_parts = codex_usage_segments(snap) if fresh else []
+    if burn:
+        codex_parts.append(burn)
+    codex_model = codex_model_name(snap) if codex_parts else ""
+    cx_eff = codex_effort(snap) if codex_parts else None
+
+    def _plen(n, e):
+        return len(n) + (len(f" · {e}") if e else 0)
+    label_w = max(_plen(claude_model, cl_eff), _plen(codex_model, cx_eff) if codex_parts else 0, 8)
+
+    claude_metrics = model_row(claude_model, cl_eff, label_w, [
         ctx_segment(data),
         limit_segment("5H", fh, FIVE_HOUR),
         limit_segment("WK", sd, SEVEN_DAY),
-    ])
+    ], CLAUDE_ORANGE)
+    codex_metrics = (model_row(codex_model, cx_eff, label_w, codex_parts, CODEX_WHITE)
+                     if codex_parts else None)
     meditation = meditation_line(fh)
 
-    lines = [ln for ln in (identity, cockpit, metrics, meditation) if ln]
+    lines = [ln for ln in (identity, cockpit, claude_metrics, codex_metrics, meditation) if ln]
     sys.stdout.write("\n".join(lines))
 
 

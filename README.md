@@ -1,20 +1,27 @@
 # m-statusline
 
 The cockpit for the [`/m` pipeline](https://github.com/milorad-teodorovic/m-pipeline):
-a [Claude Code](https://claude.com/claude-code) statusline that shows the active
-model, your git branch and ticket, **pace-aware** usage bars that project where
-your 5-hour and weekly limits will land at reset. While `/m:develop` runs, a cockpit line tracks
-the phase, its runtime, the task flow, and open blockers — live, from the `.m/`
-state the pipeline writes. Without m-pipeline it degrades to a clean model + git
-+ usage statusline, but the cockpit is the point.
+a [Claude Code](https://claude.com/claude-code) statusline that shows your git
+branch and ticket, **pace-aware** usage bars that project where your 5-hour and
+weekly limits will land at reset, and — when the pipeline drives Codex as a
+second engine — a parallel **Codex** usage row plus a live per-run token-burn
+gauge. While `/m:develop` runs, a cockpit line tracks the phase, its runtime, the
+task flow, and open blockers — live, from the `.m/` state the pipeline writes.
+Without m-pipeline it degrades to a clean git + usage statusline, but the cockpit
+is the point.
 
 Single file. Python standard library only. No dependencies.
 
 ```
-Opus 4.8  ·  ⎇ feat/ENG-142 ●3 ↑1  ·  ENG-142
+⎇ feat/ENG-142 ●3 ↑1  ·  ENG-142
 m implement ◉◉◐○○ 2/5 ·12m  ·  tasks 4/6
-CTX ███░░░░░ 41%  ·  5H ██░░░░░░ 23%→41% ·2h13m  ·  WK ████░░░░ 76%→104% ·1d20h
+Opus 4.8 · xhigh  CTX ███░░░░░ 41%  ·  5H ██░░░░░░ 23%→41% ·2h13m  ·  WK ████░░░░ 76%→104% ·1d20h
+gpt-5.5 · xhigh   5H ███░░░░░ 34% ·2h29m  ·  WK █████░░░ 58% ·4d15h  ·  burn █████░░░ 92k/150k
 ```
+
+Each usage row is prefixed with its model name and reasoning effort as one unit
+in a single colour (Claude row in Claude orange, Codex row in white). The Codex
+row appears only while Codex is actually in use.
 
 (In the terminal each segment is colored by load; the block above is the
 plain-text shape.)
@@ -25,10 +32,11 @@ plain-text shape.)
 
 | Segment | Meaning |
 |---|---|
-| `Opus 4.8` | Active model display name. |
 | `⎇ main ●3 ↑1` | Git branch, with `●` uncommitted count, `↑` commits ahead, `↓` behind. Shows the worktree name (`⌂name`) inside a worktree, a short SHA when detached, and nothing outside a repo. |
 | `ENG-142` | Jira ticket captured from the branch via `.m/jira.yml` `branchPattern`. |
 | `m ✗ last run BLOCKED` / `m idx stale 42d` | Idle pipeline alerts: shown only when the last run blocked or the index is stale. Silent otherwise. |
+
+The active model is no longer on the identity line — it labels its own usage row instead (see Line 2/3 below).
 
 **Pipeline cockpit (appears while `/m:develop` runs)**
 
@@ -38,14 +46,25 @@ plain-text shape.)
 | `loop 2/3 ·4 left` | The `/m:iterate` loop counter and remaining issues, parsed from `.m/PROGRESS.md`. Iterate phase only. |
 | `tasks 4/6` | Task progress (completed/total) from `.m/TASKS.md`. |
 
-**Line 2: metrics**
+**Line 2: Claude metrics** — prefixed with the active model name (in Claude orange)
 
 | Segment | Meaning |
 |---|---|
+| `Opus 4.8 · xhigh` | Active model display name plus reasoning effort (from `~/.claude/settings.json` `effortLevel`), labeling this row. |
 | `CTX ███░░░░░ 41%` | Context window used. |
 | `5H … 23%→41%` | 5-hour rate limit: used now → **projected** at window end. |
 | `WK … 76%→104%` | 7-day rate limit: used now → projected at window end. |
 | `·1d20h` | Time until that window resets. |
+
+**Line 3: Codex metrics** — prefixed with the Codex model name (in white); appears only when the pipeline is using Codex
+
+| Segment | Meaning |
+|---|---|
+| `gpt-5.5 · xhigh` | Codex model + reasoning effort from the last run's snapshot (or `~/.codex/config.toml` `model` / `model_reasoning_effort`). |
+| `5H … 34%` · `WK … 58%` | Real Codex account rate-limit usage with a reset countdown, read from the `payload.rate_limits` the Codex CLI returns on each run. Codex reports a 5-hour and a weekly window, mirroring the Claude row. |
+| `burn █████░░░ 92k/150k` | Per-run Codex token spend vs the `token_budget` for the current `/m` run. |
+
+The Codex row is read from `~/.claude/.codex-limits.json` (account usage, written by the pipeline's metered Codex helper) and `.m/handoff/codex-meter.txt` (the live per-run burn). It is shown only when Codex was used recently (within `CODEX_FRESH_TTL`, default 6h) or a run is actively burning tokens; otherwise the row is hidden.
 
 The branch is read by running `git` in your working directory (the statusLine
 JSON carries no current-branch field) and is cached for a few seconds so the
@@ -53,9 +72,9 @@ once-per-second refresh never spawns a subprocess storm.
 
 ### Colors
 
-Every field climbs the same load ladder, driven by its own progress. The
-rate-limit bars feed it their **projection**, not the raw used value; CTX
-feeds it the used value:
+Bar fills climb the same load ladder, driven by their own progress. The Claude
+rate-limit bars feed it their **projection**, not the raw used value; CTX and the
+Codex usage bars feed it the used value:
 
 | Color | Load |
 |---|---|
@@ -65,6 +84,9 @@ feeds it the used value:
 | red | 90%+ |
 
 The projection is suppressed for the first 2% of a window, where it is just noise.
+
+Each usage row's **model-name label** is brand-colored instead: Claude orange
+(`#E67D22`) for the Claude row, white (`#FFFFFF`) for the Codex row.
 
 ## Install
 
@@ -112,6 +134,8 @@ Everything tweakable lives near the top of `statusline.py`:
 
 - `BAR_WIDTH`: width of the usage bars in cells.
 - `color_for()`: the load-ladder thresholds (blue / green / amber / red).
+- `CLAUDE_ORANGE` / `CODEX_WHITE`: the per-row model-label colors.
+- `CODEX_FRESH_TTL`: how long (seconds) since the last Codex run the Codex row stays visible (default 6h).
 - `GIT_TTL`: how long git state is cached, in seconds (default 5).
 - `PIPELINE`: the list of `/m` phases to track.
 
