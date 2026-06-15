@@ -16,12 +16,14 @@ Single file. Python standard library only. No dependencies.
 ⎇ feat/ENG-142 ●3 ↑1  ·  ENG-142
 m implement ◉◉◐○○ 2/5 ·12m  ·  tasks 4/6
 Opus 4.8 · xhigh  CTX ███░░░░░ 41%  ·  5H ██░░░░░░ 23%→41% ·2h13m  ·  WK ████░░░░ 76%→104% ·1d20h
-gpt-5.5 · xhigh   5H ███░░░░░ 34% ·2h29m  ·  WK █████░░░ 58% ·4d15h  ·  burn █████░░░ 92k/150k
+gpt-5.5 · xhigh   · idle
 ```
 
 Each usage row is prefixed with its model name and reasoning effort as one unit
 in a single colour (Claude row in Claude orange, Codex row in white). The Codex
-row appears only while Codex is actually in use.
+row is present throughout a `/m:develop` run when Codex is enabled — `· idle`
+between passes, a live `burn` gauge during plan and review — and hidden when
+Codex is disabled.
 
 (In the terminal each segment is colored by load; the block above is the
 plain-text shape.)
@@ -56,15 +58,17 @@ The active model is no longer on the identity line — it labels its own usage r
 | `WK … 76%→104%` | 7-day rate limit: used now → projected at window end. |
 | `·1d20h` | Time until that window resets. |
 
-**Line 3: Codex metrics** — prefixed with the Codex model name (in white); appears only when the pipeline is using Codex
+**Line 3: Codex metrics** — prefixed with the Codex model name (in white). Present throughout a `/m:develop` run whenever Codex is enabled: a dim `· idle` between passes, the live `burn` gauge while Codex drives **plan** and **review** as the second engine. Hidden when Codex is disabled.
 
 | Segment | Meaning |
 |---|---|
-| `gpt-5.5 · xhigh` | Codex model + reasoning effort from the last run's snapshot (or `~/.codex/config.toml` `model` / `model_reasoning_effort`). |
-| `5H … 34%` · `WK … 58%` | Real Codex account rate-limit usage with a reset countdown, read from the `payload.rate_limits` the Codex CLI returns on each run. Codex reports a 5-hour and a weekly window, mirroring the Claude row. |
-| `burn █████░░░ 92k/150k` | Per-run Codex token spend vs the `token_budget` for the current `/m` run. |
+| `gpt-5.5 · xhigh` | Codex model + reasoning effort, from `~/.codex/config.toml` `model` / `model_reasoning_effort`. |
+| `· idle` | Codex is enabled for this `/m:develop` run but no pass is currently burning tokens (refine / implement / iterate phases). |
+| `burn █████░░░ 92k/200k` | Live per-pass Codex token spend vs the `token_budget` (default 200k), while a `plan` or `review` pass runs. |
 
-The Codex row is read from `~/.claude/.codex-limits.json` (account usage, written by the pipeline's metered Codex helper) and `.m/handoff/codex-meter.txt` (the live per-run burn). It is shown only when Codex was used recently (within `CODEX_FRESH_TTL`, default 6h) or a run is actively burning tokens; otherwise the row is hidden.
+The `burn` gauge reads `.m/handoff/codex-meter.txt` (the live per-pass token total, created during a Codex pass and removed when it ends); the row's presence is gated on `.m/DEVELOP_ACTIVE` plus `codex.enabled: true` in `.m/pipeline.yml`.
+
+> Persistent 5-hour / weekly Codex usage bars (mirroring the Claude row) are not currently shown: `codex exec` emits `rate_limits: null`, so the account snapshot at `~/.claude/.codex-limits.json` is never written. They return if codex-cli exposes rate limits in exec mode ([openai/codex#14728](https://github.com/openai/codex/issues/14728)).
 
 The branch is read by running `git` in your working directory (the statusLine
 JSON carries no current-branch field) and is cached for a few seconds so the

@@ -427,6 +427,24 @@ def codex_budget(m_dir):
     return 200000
 
 
+def codex_enabled(m_dir):
+    """True when the .m/pipeline.yml codex: block has enabled: true."""
+    if not m_dir:
+        return False
+    in_codex = False
+    for raw in _read(os.path.join(m_dir, "pipeline.yml")).splitlines():
+        stripped = raw.strip()
+        if not in_codex:
+            if stripped.startswith("codex:"):
+                in_codex = True
+            continue
+        if stripped and not raw[:1].isspace():  # dedent to a top-level key ends the block
+            break
+        if stripped.startswith("enabled:"):
+            return stripped.split(":", 1)[1].split("#")[0].strip().lower() == "true"
+    return False
+
+
 def humanize_tokens(n):
     """Compact token count like 45k / 1.4M."""
     if n >= 1_000_000:
@@ -619,8 +637,10 @@ def main():
         idle_badge(m_dir) if (m_dir and not phase) else None,
     ])
     cockpit = cockpit_line(m_dir, phase) if (m_dir and phase) else None
-    # Two aligned, model-labeled usage rows: Claude (CTX/5H/WK) and, when a
-    # Codex run has left a snapshot or a live burn meter, Codex (5H/WK/burn).
+    # Two aligned, model-labeled usage rows: Claude (CTX/5H/WK) and Codex. The
+    # Codex row shows its 5H/WK bars + live burn when a snapshot/meter exists,
+    # and stays present throughout a /m:develop flow whenever Codex is enabled
+    # (a dim idle tag between passes) — hidden only when Codex is disabled.
     claude_model = (data.get("model") or {}).get("display_name") or "claude"
     cl_eff = claude_effort()
     snap = codex_limits()
@@ -629,12 +649,16 @@ def main():
     codex_parts = codex_usage_segments(snap) if fresh else []
     if burn:
         codex_parts.append(burn)
-    codex_model = codex_model_name(snap) if codex_parts else ""
-    cx_eff = codex_effort(snap) if codex_parts else None
+    develop_codex = bool(phase) and codex_enabled(m_dir)
+    show_codex = bool(codex_parts) or develop_codex
+    if not codex_parts and develop_codex:  # develop flow, no live pass -> idle tag
+        codex_parts = [f"{DIM}· idle{RESET}"]
+    codex_model = codex_model_name(snap) if show_codex else ""
+    cx_eff = codex_effort(snap) if show_codex else None
 
     def _plen(n, e):
         return len(n) + (len(f" · {e}") if e else 0)
-    label_w = max(_plen(claude_model, cl_eff), _plen(codex_model, cx_eff) if codex_parts else 0, 8)
+    label_w = max(_plen(claude_model, cl_eff), _plen(codex_model, cx_eff) if show_codex else 0, 8)
 
     claude_metrics = model_row(claude_model, cl_eff, label_w, [
         ctx_segment(data),
@@ -642,7 +666,7 @@ def main():
         limit_segment("WK", sd, SEVEN_DAY),
     ], CLAUDE_ORANGE)
     codex_metrics = (model_row(codex_model, cx_eff, label_w, codex_parts, CODEX_WHITE)
-                     if codex_parts else None)
+                     if show_codex else None)
     meditation = meditation_line(fh)
 
     lines = [ln for ln in (identity, cockpit, claude_metrics, codex_metrics, meditation) if ln]
