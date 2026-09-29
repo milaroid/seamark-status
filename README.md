@@ -34,9 +34,14 @@ plain-text shape.)
 
 | Segment | Meaning |
 |---|---|
-| `⎇ main ●3 ↑1` | Git branch, with `●` uncommitted count, `↑` commits ahead, `↓` behind. Shows the worktree name (`⌂name`) inside a worktree, a short SHA when detached, and nothing outside a repo. |
-| `ENG-142` | Jira ticket captured from the branch via `.m/jira.yml` `branchPattern`. |
+| `⎇ main ●3 ↑1` | Git branch, with `●` uncommitted count, `↑` commits ahead, `↓` behind. Shows the worktree name (`⌂name`) inside a worktree, a short SHA when detached, and nothing outside a repo. Links to the branch on the origin host. |
+| `ENG-142` | Jira ticket captured from the branch via `.m/jira.yml` `branchPattern`. Links to `https://<site>/browse/ENG-142` when `.m/jira.yml` sets `site`. |
+| `PR #6 draft` | The open PR (or GitLab MR) for this branch, from Claude Code's `pr` fields, linked to the PR page. The state reads `draft` (dim), `review` (amber), `changes` (red), or `approved` (green). |
 | `m ✗ last run BLOCKED` / `m idx stale 42d` | Idle pipeline alerts: shown only when the last run blocked or the index is stale. Silent otherwise. |
+
+Links use OSC 8 escape codes: Cmd+click (macOS) or Ctrl+click opens them in
+terminals that support hyperlinks, such as iTerm2, Kitty, and WezTerm. Other
+terminals show plain text.
 
 The active model is no longer on the identity line — it labels its own usage row instead (see Line 2/3 below).
 
@@ -52,11 +57,17 @@ The active model is no longer on the identity line — it labels its own usage r
 
 | Segment | Meaning |
 |---|---|
-| `Opus 5.5 high` | Active model display name plus the live reasoning effort (`effort.level` from Claude Code; falls back to `~/.claude/settings.json` `effortLevel`), labeling this row. |
+| `Opus 5.5 high` | Active model display name plus the live reasoning effort (`effort.level` from Claude Code; falls back to `~/.claude/settings.json` `effortLevel`), labeling this row. A `⚡` follows when fast mode is on. |
 | `CTX ███▎░░░░ 41%` | Context window used. Bars fill in eighth-cell steps. |
 | `5H █▊▒▒░░░░ 23%→41%` | 5-hour rate limit: used now → **projected** at window end. The bright fill is the used value; a dimmer shade of the same color extends to the projection. |
 | `WK … 76%→104%` | 7-day rate limit: used now → projected at window end. |
 | `↻1d20h` | Time until that window resets. Shown only when the window load is 50% or more. |
+| `cache 92%` | Prompt cache hit ratio for the session (`prompt_cache.hit_ratio`). Dim while the cache is warm, amber once it has gone cold. Absent until caching is observed. |
+
+**Narrow terminals.** The statusline reads `COLUMNS` and drops detail until the
+widest usage row fits: first the reset countdowns, then the projection arrows,
+then it shortens the bars from 8 to 5 cells, then it drops the cache segment. The
+To Himself line is hidden when it does not fit.
 
 **Line 3: second-engine metrics** — prefixed with the engine model name (in grey). Present throughout a `/m:develop` run whenever `.m/pipeline.yml` selects `second_engine.provider: codex` or `kimi`: a dim `· idle` between passes, the live `burn` gauge while the engine drives **plan** and **review**. Hidden when the provider is `none`.
 
@@ -139,6 +150,9 @@ The dependency is one-way and optional.
 Everything tweakable lives near the top of `statusline.py`:
 
 - `BAR_WIDTH`: width of the usage bars in cells.
+- `FITS`: the narrow-terminal steps, from full to most compact.
+- `WIDTH_MARGIN`: cells kept free at the right edge (default 4).
+- `PR_STATES`: the word and color for each PR review state.
 - `color_for()`: the load-ladder thresholds (blue / green / amber / red).
 - `CLAUDE_ORANGE` / `CODEX_GREY`: the per-row model-label colors.
 - `COUNTDOWN_MIN_LOAD`: the window load (percent) at which the reset countdown appears (default 50).
