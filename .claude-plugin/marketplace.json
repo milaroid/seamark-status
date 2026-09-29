@@ -7,7 +7,7 @@
     {
       "name": "m-statusline",
       "source": "./",
-      "description": "Two-line Claude Code statusline: active model, /m pipeline stage, and pace-aware usage bars with an animated burn duck (🦆 strolling, 🦆💨 sprinting, 🦆🔥 on fire). Single Python file, stdlib only."
+      "description": "Claude Code statusline and cockpit for the Seamark /m pipeline: git and ticket, the live phase and task flow, and pace-aware usage bars that project where your 5-hour and weekly limits land at reset. Single Python file, stdlib only."
     }
   ]
 }

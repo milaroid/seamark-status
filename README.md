@@ -1,6 +1,6 @@
 # m-statusline
 
-The cockpit for the [`/m` pipeline](https://github.com/milorad-teodorovic/m-pipeline):
+The cockpit for [Seamark](https://slash-m.dev), the [`/m` pipeline](https://github.com/milorad-teodorovic/m-pipeline):
 a [Claude Code](https://claude.com/claude-code) statusline that shows your git
 branch and ticket, **pace-aware** usage bars that project where your 5-hour and
 weekly limits will land at reset, and — when the pipeline drives Codex or Kimi

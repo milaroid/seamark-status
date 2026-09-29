@@ -43,4 +43,4 @@ print("statusLine wired in " + settings_path
 PY
 
 echo "installed: $DEST"
-echo "restart Claude Code (or start a new session) and the duck starts running 🦆"
+echo "restart Claude Code (or start a new session) to see the statusline"

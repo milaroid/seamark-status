@@ -1,5 +1,5 @@
 ---
-description: Install the m-statusline burn duck into ~/.claude/settings.json
+description: Install the m-statusline statusline into ~/.claude/settings.json
 disable-model-invocation: false
 ---
 
@@ -23,5 +23,5 @@ Steps:
    `~/.claude/settings.json` by hand and do not retry with elevated permissions.
 
 4. On success, tell the user to restart Claude Code (or start a new session) to
-   see the statusline, and that the duck speeds up as they burn through their
-   rate limits: 🦆 strolling, 🦆💨 sprinting, 🦆🔥 on fire.
+   see the statusline. The 5-hour and weekly bars color by where each limit is
+   projected to land at reset, not only by what has been used.
