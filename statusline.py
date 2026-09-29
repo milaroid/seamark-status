@@ -4,7 +4,7 @@
 Reads the statusLine stdin JSON (https://code.claude.com/docs/en/statusline)
 and renders:
 
-  line 1 (identity): ⎇ branch ●3 ↑1 │ ENG-142
+  line 1 (identity): folder │ ⎇ branch ●3 ↑1 │ ENG-142
   cockpit (while /m:develop runs):
                      m implement ◉◉◐○○ 2/5 ·12m │ tasks 4/6
   metrics:           model effort  CTX ███▍░░░░ 41% │ 5H █▊▒▒░░░░ 23%→41% │ WK …
@@ -32,6 +32,7 @@ PROJECTED_MIX = 0.45
 RESET = "\033[0m"
 DIM = "\033[38;5;243m"
 ITALIC = "\033[3m"
+BOLD = "\033[1m"
 NO_ITALIC = "\033[23m"
 
 LOAD_BLUE = "\033[38;2;90;165;225m"
@@ -401,6 +402,12 @@ def pr_segment(data):
     return link(text, pr.get("url"))
 
 
+def folder_segment(cwd):
+    """The name of the current folder in bold, or None when cwd is unknown."""
+    name = os.path.basename(os.path.normpath(cwd)) if cwd else ""
+    return f"{BOLD}{name}{RESET}" if name else None
+
+
 def repo_url(workspace, branch):
     """Web URL of branch in the origin repository, from the statusLine repo fields."""
     repo = workspace.get("repo") or {}
@@ -530,26 +537,6 @@ def index_stale_days(m_dir):
     except OSError:
         return None
     return int(age // 86400)
-
-
-BABYSIT_FRESH_SECS = 2 * 3600
-
-
-def babysit_badge(m_dir):
-    """Last PR-babysit cycle from .m/babysit-status.json, or None if absent or stale."""
-    try:
-        with open(os.path.join(m_dir, "babysit-status.json"), encoding="utf-8") as fh:
-            obj = json.load(fh)
-    except (OSError, json.JSONDecodeError, ValueError):
-        return None
-    ts = obj.get("ts")
-    summary = str(obj.get("summary") or "").strip()
-    if not summary or not isinstance(ts, (int, float)):
-        return None
-    age = time.time() - ts
-    if age < 0 or age > BABYSIT_FRESH_SECS:
-        return None
-    return f"{CYAN}🦆 {summary}{RESET} {DIM}·{humanize_secs(age)}{RESET}"
 
 
 def _read_int(path):
@@ -757,8 +744,6 @@ def idle_badge(m_dir):
     verdict, _ = last_outcomes()
     if verdict == "BLOCKED":
         return f"{RED}m ✗ last run BLOCKED{RESET}"
-    if babysit_badge(m_dir):
-        return None
     stale = index_stale_days(m_dir)
     if stale is not None and stale >= STALE_DAYS:
         return f"{YELLOW}m idx stale {stale}d{RESET}"
@@ -858,10 +843,10 @@ def main():
 
     ticket = jira_key(m_dir, git["branch"]) if (m_dir and git) else None
     identity = join([
+        folder_segment(cwd),
         git_segment(git, repo_url(workspace, (git or {}).get("branch"))),
         link(f"{DIM}{ticket}{RESET}", jira_url(m_dir, ticket)) if ticket else None,
         pr_segment(data),
-        babysit_badge(m_dir) if m_dir else None,
         idle_badge(m_dir) if (m_dir and not phase) else None,
     ])
     cockpit = cockpit_line(m_dir, phase) if (m_dir and phase) else None

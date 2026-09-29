@@ -13,7 +13,7 @@ is the point.
 Single file. Python standard library only. No dependencies.
 
 ```
-⎇ feat/ENG-142 ●3 ↑1 │ ENG-142
+api │ ⎇ feat/ENG-142 ●3 ↑1 │ ENG-142
 m implement ◉◉◐○○ 2/5 ·12m │ tasks 4/6
 Opus 5.5 high     CTX ███▎░░░░ 41% │ 5H █▊▒▒░░░░ 23%→41% │ WK ██████▏▒ 76%→104% ↻1d20h
 gpt-6-astra high  · idle
@@ -34,11 +34,11 @@ plain-text shape.)
 
 | Segment | Meaning |
 |---|---|
+| `m-pipeline` | Name of the current folder, in bold. |
 | `⎇ main ●3 ↑1` | Git branch, with `●` uncommitted count, `↑` commits ahead, `↓` behind. Shows the worktree name (`⌂name`) inside a worktree, a short SHA when detached, and nothing outside a repo. Links to the branch on the origin host. |
 | `ENG-142` | Jira ticket captured from the branch via `.m/jira.yml` `branchPattern`. Links to `https://<site>/browse/ENG-142` when `.m/jira.yml` sets `site`. |
 | `PR #6 draft` | The open PR (or GitLab MR) for this branch, from Claude Code's `pr` fields, linked to the PR page. The state reads `draft` (dim), `review` (amber), `changes` (red), or `approved` (green). |
 | `m ✗ last run BLOCKED` / `m idx stale 42d` | Idle pipeline alerts: shown only when the last run blocked or the index is stale. Silent otherwise. |
-| `🦆 2 PRs fixed ·12m` | The last PR-babysit cycle, from `.m/babysit-status.json` (`ts` and `summary`). Shown for 2 hours after the cycle. It replaces the stale-index alert while it shows. |
 
 Links use OSC 8 escape codes: Cmd+click (macOS) or Ctrl+click opens them in
 terminals that support hyperlinks, such as iTerm2, Kitty, and WezTerm. Other
