@@ -38,6 +38,7 @@ plain-text shape.)
 | `ENG-142` | Jira ticket captured from the branch via `.m/jira.yml` `branchPattern`. Links to `https://<site>/browse/ENG-142` when `.m/jira.yml` sets `site`. |
 | `PR #6 draft` | The open PR (or GitLab MR) for this branch, from Claude Code's `pr` fields, linked to the PR page. The state reads `draft` (dim), `review` (amber), `changes` (red), or `approved` (green). |
 | `m ✗ last run BLOCKED` / `m idx stale 42d` | Idle pipeline alerts: shown only when the last run blocked or the index is stale. Silent otherwise. |
+| `🦆 2 PRs fixed ·12m` | The last PR-babysit cycle, from `.m/babysit-status.json` (`ts` and `summary`). Shown for 2 hours after the cycle. It replaces the stale-index alert while it shows. |
 
 Links use OSC 8 escape codes: Cmd+click (macOS) or Ctrl+click opens them in
 terminals that support hyperlinks, such as iTerm2, Kitty, and WezTerm. Other

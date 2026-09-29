@@ -226,12 +226,15 @@ def git_info(cwd, worktree):
     cache = {}
     try:
         with open(GIT_CACHE) as fh:
-            cache = json.load(fh)
+            loaded = json.load(fh)
+        if isinstance(loaded, dict):  # tolerate a corrupt/foreign cache shape
+            cache = loaded
     except (OSError, json.JSONDecodeError, ValueError):
         pass
     entry = cache.get(cwd)
-    if entry and now - entry["ts"] < GIT_TTL:
-        return entry["data"]
+    if (isinstance(entry, dict) and isinstance(entry.get("ts"), (int, float))
+            and now - entry["ts"] < GIT_TTL):
+        return entry.get("data")
     data = _compute_git(cwd, worktree)
     cache[cwd] = {"ts": now, "data": data}
     try:
@@ -441,7 +444,7 @@ def find_m_dir(cwd):
 
 def read_current_phase(m_dir):
     try:
-        with open(os.path.join(m_dir, "DEVELOP_ACTIVE")) as fh:
+        with open(os.path.join(m_dir, "DEVELOP_ACTIVE"), encoding="utf-8") as fh:
             for line in fh:
                 if line.startswith("current_phase:"):
                     return line.split(":", 1)[1].strip()
@@ -527,6 +530,26 @@ def index_stale_days(m_dir):
     except OSError:
         return None
     return int(age // 86400)
+
+
+BABYSIT_FRESH_SECS = 2 * 3600
+
+
+def babysit_badge(m_dir):
+    """Last PR-babysit cycle from .m/babysit-status.json, or None if absent or stale."""
+    try:
+        with open(os.path.join(m_dir, "babysit-status.json"), encoding="utf-8") as fh:
+            obj = json.load(fh)
+    except (OSError, json.JSONDecodeError, ValueError):
+        return None
+    ts = obj.get("ts")
+    summary = str(obj.get("summary") or "").strip()
+    if not summary or not isinstance(ts, (int, float)):
+        return None
+    age = time.time() - ts
+    if age < 0 or age > BABYSIT_FRESH_SECS:
+        return None
+    return f"{CYAN}🦆 {summary}{RESET} {DIM}·{humanize_secs(age)}{RESET}"
 
 
 def _read_int(path):
@@ -731,12 +754,14 @@ def model_row(name, effort, width, parts, color=DIM):
 
 def idle_badge(m_dir):
     """Quiet idle summary: alerts loudly, brags softly, says nothing otherwise."""
-    stale = index_stale_days(m_dir)
-    if stale is not None and stale >= STALE_DAYS:
-        return f"{YELLOW}m idx stale {stale}d{RESET}"
     verdict, _ = last_outcomes()
     if verdict == "BLOCKED":
         return f"{RED}m ✗ last run BLOCKED{RESET}"
+    if babysit_badge(m_dir):
+        return None
+    stale = index_stale_days(m_dir)
+    if stale is not None and stale >= STALE_DAYS:
+        return f"{YELLOW}m idx stale {stale}d{RESET}"
     return None
 
 
@@ -836,6 +861,7 @@ def main():
         git_segment(git, repo_url(workspace, (git or {}).get("branch"))),
         link(f"{DIM}{ticket}{RESET}", jira_url(m_dir, ticket)) if ticket else None,
         pr_segment(data),
+        babysit_badge(m_dir) if m_dir else None,
         idle_badge(m_dir) if (m_dir and not phase) else None,
     ])
     cockpit = cockpit_line(m_dir, phase) if (m_dir and phase) else None
@@ -887,4 +913,10 @@ def fitted_rows(data, m_dir, phase, limit):
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        # Never let the status line crash the prompt: any unhandled error
+        # degrades to an empty status line rather than a traceback + nonzero
+        # exit (which the statusLine host would render as a broken line).
+        sys.exit(0)
