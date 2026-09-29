@@ -4,10 +4,10 @@
 Reads the statusLine stdin JSON (https://code.claude.com/docs/en/statusline)
 and renders:
 
-  line 1 (identity): model  ·  ⎇ branch ●3 ↑1  ·  ENG-142
+  line 1 (identity): ⎇ branch ●3 ↑1 │ ENG-142
   cockpit (while /m:develop runs):
-                     m implement ◉◉◐○○ 2/5 ·12m  ·  ☐2 ✓4  ·  ⚠2
-  metrics:           CTX ████░░░░ 41%  ·  5H ██░░ 23%→41% ·2h13m  ·  WK …
+                     m implement ◉◉◐○○ 2/5 ·12m │ tasks 4/6
+  metrics:           model effort  CTX ███▍░░░░ 41% │ 5H █▊▒▒░░░░ 23%→41% │ WK …
 
 Usage bars are pace-aware: the 5-hour and weekly bars project end-of-window
 usage from how much of the window has already elapsed (used% x window/elapsed)
@@ -24,28 +24,33 @@ import time
 
 BAR_WIDTH = 8
 FILLED = "█"
-EMPTY = "░"
+EIGHTHS = " ▏▎▍▌▋▊▉"
+TRACK_RGB = (48, 58, 74)
+PROJECTED_MIX = 0.45
 RESET = "\033[0m"
 DIM = "\033[38;5;243m"
-GREEN = "\033[38;5;42m"
-YELLOW = "\033[38;5;220m"
-RED = "\033[38;5;196m"
-CYAN = "\033[38;5;45m"
-
-SEP = f"{DIM}  ·  {RESET}"
-PIPELINE = ["refine", "plan", "implement", "review", "iterate"]
-FIVE_HOUR = 5 * 3600
-SEVEN_DAY = 7 * 86400
-CODEX_FRESH_TTL = 6 * 3600  # hide the Codex row when no run within this window
-
+ITALIC = "\033[3m"
+NO_ITALIC = "\033[23m"
 
 LOAD_BLUE = "\033[38;2;90;165;225m"
 LOAD_GREEN = "\033[38;2;80;200;130m"
 LOAD_AMBER = "\033[38;2;225;190;70m"
 LOAD_RED = "\033[38;2;225;70;50m"
 
+GREEN = LOAD_GREEN
+YELLOW = LOAD_AMBER
+RED = LOAD_RED
+CYAN = "\033[38;2;80;190;210m"
+
+SEP = f"{DIM} │ {RESET}"
+PIPELINE = ["refine", "plan", "implement", "review", "iterate"]
+FIVE_HOUR = 5 * 3600
+SEVEN_DAY = 7 * 86400
+CODEX_FRESH_TTL = 6 * 3600  # hide the Codex row when no run within this window
+COUNTDOWN_MIN_LOAD = 50
+
 CLAUDE_ORANGE = "\033[38;2;230;125;34m"   # #E67D22 — Claude row label
-CODEX_WHITE = "\033[38;2;255;255;255m"    # Codex row label
+CODEX_GREY = "\033[38;2;170;170;170m"     # #AAAAAA — Codex row label
 
 
 def color_for(pct):
@@ -62,20 +67,75 @@ def color_for(pct):
     return LOAD_BLUE
 
 
-def bar_cells(pct, col):
-    """Render an 8-cell bar in the given color, dim for the empty remainder."""
-    if pct is None:
-        return f"{DIM}{EMPTY * BAR_WIDTH}{RESET}"
+def _eighths(pct):
+    """Percentage as a count of eighth-cells across the bar, clamped to the bar."""
     pct = max(0.0, min(100.0, float(pct)))
-    filled = int(round(pct / 100 * BAR_WIDTH))
-    return f"{col}{FILLED * filled}{DIM}{EMPTY * (BAR_WIDTH - filled)}{RESET}"
+    return int(round(pct / 100 * BAR_WIDTH * 8))
+
+
+def _rgb(col):
+    """The (r, g, b) of a truecolor foreground escape, or TRACK_RGB if it has none."""
+    hit = re.search(r"38;2;(\d+);(\d+);(\d+)", col or "")
+    return tuple(int(v) for v in hit.groups()) if hit else TRACK_RGB
+
+
+def _fg(rgb):
+    return "\033[38;2;%d;%d;%dm" % rgb
+
+
+def _bg(rgb):
+    return "\033[48;2;%d;%d;%dm" % rgb
+
+
+def _mix(a, b, t):
+    """Blend color a over color b with weight t."""
+    return tuple(round(x * t + y * (1 - t)) for x, y in zip(a, b))
+
+
+def _cell(i, used_e, proj_e, rgb):
+    """One bar cell in solid truecolor: used fill, projected shade, or track.
+
+    A partial used cell draws its eighth-block over a background of the color
+    that follows it, so the bar has no gap in the terminal background.
+    """
+    used = max(0, min(8, used_e - i * 8))
+    proj = max(0, min(8, proj_e - i * 8))
+    shade = _mix(rgb, TRACK_RGB, PROJECTED_MIX)
+    if used == 8:
+        return f"{_fg(rgb)}{FILLED}"
+    if used:
+        behind = shade if proj > used else TRACK_RGB
+        return f"{_fg(rgb)}{_bg(behind)}{EIGHTHS[used]}\033[49m"
+    return f"{_fg(shade if proj >= 4 else TRACK_RGB)}{FILLED}"
+
+
+def bar_cells(pct, col, proj=None):
+    """Render a BAR_WIDTH-cell bar in col with eighth-cell precision.
+
+    pct is the used percentage. proj, when given, is the projected percentage;
+    cells between used and projected render in a dimmer shade of col.
+    """
+    if pct is None:
+        return f"{_fg(TRACK_RGB)}{FILLED * BAR_WIDTH}{RESET}"
+    rgb = _rgb(col)
+    used_e = _eighths(pct)
+    proj_e = _eighths(proj) if proj is not None else used_e
+    cells = "".join(_cell(i, used_e, proj_e, rgb) for i in range(BAR_WIDTH))
+    return f"{cells}{RESET}"
 
 
 def humanize(resets_at):
-    """Compact reset countdown like ·2h13m / ·3d5h, or empty if unknown."""
+    """Compact reset countdown like ↻2h13m / ↻3d5h, or empty if unknown."""
     if not resets_at:
         return ""
-    return f" {DIM}·{humanize_secs(int(resets_at) - time.time())}{RESET}"
+    return f" {DIM}↻{humanize_secs(int(resets_at) - time.time())}{RESET}"
+
+
+def countdown(resets_at, load):
+    """Reset countdown only when load reaches COUNTDOWN_MIN_LOAD, else empty."""
+    if load is None or load < COUNTDOWN_MIN_LOAD:
+        return ""
+    return humanize(resets_at)
 
 
 def humanize_secs(secs):
@@ -258,7 +318,8 @@ def meditation_line(five_hour):
         return None
     pool = MEDITATIONS[tier]
     quote = pool[(int(time.time()) // ROTATE_SECONDS) % len(pool)]
-    return f"{color_for(proj)}\033[3mTo Himself\033[23m: {quote}{RESET}"
+    return (f"{color_for(proj)}{ITALIC}To Himself{RESET}"
+            f"{DIM}{ITALIC}: {quote}{NO_ITALIC}{RESET}")
 
 
 
@@ -268,14 +329,15 @@ def limit_segment(label, obj, window):
     used = obj.get("used_percentage")
     resets = obj.get("resets_at")
     proj = project(used, resets, window)
-    col = color_for(proj if proj is not None else used)
-    cells = bar_cells(used, col)
+    load = proj if proj is not None else used
+    col = color_for(load)
+    cells = bar_cells(used, col, proj)
     if used is None:
         pct = f"{DIM}--%{RESET}"
     else:
         pct = f"{col}{used:>3.0f}%{RESET}"
     arrow = f"{DIM}→{RESET}{col}{proj:.0f}%{RESET}" if proj is not None else ""
-    return f"{DIM}{label}{RESET} {cells} {pct}{arrow}{humanize(resets)}"
+    return f"{DIM}{label}{RESET} {cells} {pct}{arrow}{countdown(resets, load)}"
 
 
 def ctx_segment(data):
@@ -408,41 +470,58 @@ def _read_int(path):
         return None
 
 
-def codex_budget(m_dir):
-    """token_budget from the .m/pipeline.yml codex: block, default 200000."""
-    in_codex = False
-    for raw in _read(os.path.join(m_dir, "pipeline.yml")).splitlines():
+ENGINE_DEFAULTS = {
+    "codex": {"model": "gpt-6-astra", "reasoning_effort": "high"},
+    "kimi": {"model": "kimi-code/k3", "reasoning_effort": "high"},
+}
+
+
+def _yaml_block(text, name):
+    """Scalar keys of a top-level YAML block such as 'second_engine:', or None."""
+    block, inside = None, False
+    for raw in text.splitlines():
         stripped = raw.strip()
-        if not in_codex:
-            if stripped.startswith("codex:"):
-                in_codex = True
+        if not inside:
+            if stripped.startswith(name + ":") and not raw[:1].isspace():
+                block, inside = {}, True
             continue
-        if stripped and not raw[:1].isspace():  # dedent to a top-level key ends the block
+        if stripped and not raw[:1].isspace():
             break
-        if stripped.startswith("token_budget:"):
-            try:
-                return int(stripped.split(":", 1)[1].split("#")[0].strip())
-            except ValueError:
-                return 200000
-    return 200000
+        key, sep, value = stripped.partition(":")
+        if sep and key and not key.startswith(("#", "-")):
+            block[key] = value.split("#")[0].strip().strip("\"'")
+    return block
 
 
-def codex_enabled(m_dir):
-    """True when the .m/pipeline.yml codex: block has enabled: true."""
+def second_engine(m_dir):
+    """The /m second engine as {provider, model, effort, budget}, or None.
+
+    Reads the .m/pipeline.yml second_engine: block. Without one, a legacy
+    codex: block with enabled: true maps to provider codex.
+    """
     if not m_dir:
-        return False
-    in_codex = False
-    for raw in _read(os.path.join(m_dir, "pipeline.yml")).splitlines():
-        stripped = raw.strip()
-        if not in_codex:
-            if stripped.startswith("codex:"):
-                in_codex = True
-            continue
-        if stripped and not raw[:1].isspace():  # dedent to a top-level key ends the block
-            break
-        if stripped.startswith("enabled:"):
-            return stripped.split(":", 1)[1].split("#")[0].strip().lower() == "true"
-    return False
+        return None
+    text = _read(os.path.join(m_dir, "pipeline.yml"))
+    block = _yaml_block(text, "second_engine")
+    if block is None:
+        legacy = _yaml_block(text, "codex") or {}
+        if legacy.get("enabled", "").lower() != "true":
+            return None
+        block = dict(legacy, provider="codex")
+    provider = block.get("provider", "none").lower()
+    if provider not in ENGINE_DEFAULTS:
+        return None
+    defaults = ENGINE_DEFAULTS[provider]
+    try:
+        budget = int(block.get("token_budget") or 200000)
+    except ValueError:
+        budget = 200000
+    return {
+        "provider": provider,
+        "model": block.get("model") or defaults["model"],
+        "effort": block.get("reasoning_effort") or defaults["reasoning_effort"],
+        "budget": budget,
+    }
 
 
 def humanize_tokens(n):
@@ -454,22 +533,27 @@ def humanize_tokens(n):
     return str(n)
 
 
-def codex_segment(m_dir):
-    """Live Codex token burn: .m/handoff/codex-meter.txt vs the per-run budget.
+def engine_burn(m_dir, engine):
+    """Live second-engine token burn: .m/handoff/<provider>-meter.txt vs the budget.
 
-    The meter file exists only while a /m Codex pass (plan/research/review) is
-    burning tokens — the pipeline cleans it up at the end of every run — so the
-    gauge appears during dual-engine work and stays quiet otherwise."""
-    if not m_dir:
+    The meter file exists only while a /m second-engine pass (plan/research/
+    review) is burning tokens; the pipeline cleans it up at the end of every
+    run, so the gauge appears during dual-engine work and stays quiet otherwise."""
+    if not m_dir or not engine:
         return None
-    used = _read_int(os.path.join(m_dir, "handoff", "codex-meter.txt"))
-    if not used:  # absent or zero -> no burn to show
+    used = _read_int(os.path.join(m_dir, "handoff", f"{engine['provider']}-meter.txt"))
+    if not used:
         return None
-    budget = codex_budget(m_dir) or 200000
+    budget = engine["budget"]
     pct = min(100.0, used / budget * 100) if budget else 0.0
     col = color_for(pct)
     return (f"{DIM}burn{RESET} {bar_cells(pct, col)} "
             f"{col}{humanize_tokens(used)}/{humanize_tokens(budget)}{RESET}")
+
+
+def kimi_label(engine):
+    """Kimi row label: the model alias with its kimi-code/ prefix shortened."""
+    return (engine.get("model") or "kimi").replace("kimi-code/", "kimi-")
 
 
 # ---------------------------------------------------------------------------
@@ -509,7 +593,7 @@ def codex_limit_segment(window):
     label = codex_window_label(window.get("window_minutes"))
     col = color_for(used)
     pct = f"{DIM}--%{RESET}" if used is None else f"{col}{used:>3.0f}%{RESET}"
-    return f"{DIM}{label}{RESET} {bar_cells(used, col)} {pct}{humanize(window.get('resets_at'))}"
+    return f"{DIM}{label}{RESET} {bar_cells(used, col)} {pct}{countdown(window.get('resets_at'), used)}"
 
 
 def codex_usage_segments(snap):
@@ -523,10 +607,12 @@ def codex_usage_segments(snap):
     return out
 
 
-def codex_model_name(snap):
-    """Codex model: the snapshot's model, else the global config.toml default."""
+def codex_model_name(snap, configured=None):
+    """Codex model: the snapshot's model, else the /m configured model, else config.toml."""
     if snap and snap.get("model"):
         return snap["model"]
+    if configured:
+        return configured
     for line in _read(os.path.expanduser("~/.codex/config.toml")).splitlines():
         stripped = line.strip()
         if stripped.startswith("model") and "=" in stripped and "reasoning" not in stripped:
@@ -534,10 +620,12 @@ def codex_model_name(snap):
     return "codex"
 
 
-def codex_effort(snap):
-    """Codex reasoning effort: the snapshot's, else config.toml model_reasoning_effort."""
+def codex_effort(snap, configured=None):
+    """Codex effort: the snapshot's, else the /m configured effort, else config.toml."""
     if snap and snap.get("effort"):
         return snap["effort"]
+    if configured:
+        return configured
     for line in _read(os.path.expanduser("~/.codex/config.toml")).splitlines():
         stripped = line.strip()
         if stripped.startswith("model_reasoning_effort") and "=" in stripped:
@@ -545,13 +633,22 @@ def codex_effort(snap):
     return None
 
 
-def claude_effort():
-    """Claude reasoning effort from ~/.claude/settings.json effortLevel, or None."""
+def claude_effort(model_id):
+    """Claude reasoning effort for model_id from the active profile settings.json.
+
+    The profile is $CLAUDE_CONFIG_DIR, else ~/.claude. Reads
+    modelSettings.<model_id>.effortLevel (the "[1m]" style suffix is
+    dropped), else the top-level effortLevel, or None.
+    """
     try:
-        with open(os.path.expanduser("~/.claude/settings.json"), encoding="utf-8") as fh:
-            return (json.load(fh) or {}).get("effortLevel")
+        config_dir = os.environ.get("CLAUDE_CONFIG_DIR") or "~/.claude"
+        with open(os.path.join(os.path.expanduser(config_dir), "settings.json"), encoding="utf-8") as fh:
+            cfg = json.load(fh) or {}
     except (OSError, json.JSONDecodeError, ValueError):
         return None
+    base = re.sub(r"\[[^\]]*\]$", "", model_id or "")
+    per_model = (cfg.get("modelSettings") or {}).get(base) or {}
+    return per_model.get("effortLevel") or cfg.get("effortLevel")
 
 
 def model_row(name, effort, width, parts, color=DIM):
@@ -559,7 +656,7 @@ def model_row(name, effort, width, parts, color=DIM):
     body = join([p for p in parts if p])
     if not body:
         return None
-    label = (name or "?") + (f" · {effort}" if effort else "")
+    label = (name or "?") + (f" {effort}" if effort else "")
     return f"{color}{label}{RESET}{' ' * max(0, width - len(label))}  {body}"
 
 
@@ -574,24 +671,31 @@ def idle_badge(m_dir):
     return None
 
 
+def tracked_phases(m_dir, phase):
+    """The phases to draw: the core five, plus readiness once that gate has started."""
+    started = os.path.isfile(os.path.join(m_dir, "phase-readiness-started"))
+    return PIPELINE + ["readiness"] if phase == "readiness" or started else PIPELINE
+
+
 def cockpit_line(m_dir, phase):
     """The pipeline cockpit: dots, phase + runtime, loop, tasks, blockers."""
     def done(ph):
         return os.path.isfile(os.path.join(m_dir, f"phase-{ph}-done"))
 
+    phases = tracked_phases(m_dir, phase)
     dots = []
-    for ph in PIPELINE:
+    for ph in phases:
         if done(ph):
             dots.append(f"{GREEN}◉{RESET}")
         elif ph == phase:
             dots.append(f"{YELLOW}◐{RESET}")
         else:
             dots.append(f"{DIM}○{RESET}")
-    completed = sum(1 for ph in PIPELINE if done(ph))
+    completed = sum(1 for ph in phases if done(ph))
     track = "".join(dots)
 
     parts = [f"{DIM}m{RESET} {CYAN}{phase}{RESET} {track} "
-             f"{DIM}{completed}/{len(PIPELINE)}{RESET}"]
+             f"{DIM}{completed}/{len(phases)}{RESET}"]
     try:  # phase runtime from the -started marker's mtime
         started = os.path.getmtime(os.path.join(m_dir, f"phase-{phase}-started"))
         parts[0] += f" {DIM}·{humanize_secs(time.time() - started)}{RESET}"
@@ -608,6 +712,35 @@ def cockpit_line(m_dir, phase):
         done_n, total = tasks[1], tasks[0] + tasks[1]
         parts.append(f"{DIM}tasks {done_n}/{total}{RESET}")
     return join(parts)
+
+
+def engine_rows(m_dir, phase):
+    """Second-engine usage rows as (model, effort, parts) tuples.
+
+    The Codex row shows its 5H/WK bars while its snapshot is fresh, and the
+    live burn during a Codex pass. The row of the configured /m engine
+    (Codex or Kimi) stays present for the whole /m:develop run, with a dim
+    idle tag between passes. An engine with nothing to show has no row.
+    """
+    engine = second_engine(m_dir)
+    provider = engine["provider"] if engine else None
+    develop = bool(phase) and bool(engine)
+    rows = []
+    snap = codex_limits()
+    fresh = bool(snap) and (time.time() - snap.get("ts", 0)) < CODEX_FRESH_TTL
+    codex_parts = codex_usage_segments(snap) if fresh else []
+    burn = engine_burn(m_dir, engine) if engine else None
+    if provider == "codex" and burn:
+        codex_parts.append(burn)
+    if provider == "codex" and develop and not codex_parts:
+        codex_parts = [f"{DIM}· idle{RESET}"]
+    if codex_parts:
+        configured = engine if provider == "codex" else {}
+        rows.append((codex_model_name(snap, configured.get("model")),
+                     codex_effort(snap, configured.get("effort")), codex_parts))
+    if provider == "kimi" and (develop or burn):
+        rows.append((kimi_label(engine), engine["effort"], [burn or f"{DIM}· idle{RESET}"]))
+    return rows
 
 
 def join(parts):
@@ -637,39 +770,23 @@ def main():
         idle_badge(m_dir) if (m_dir and not phase) else None,
     ])
     cockpit = cockpit_line(m_dir, phase) if (m_dir and phase) else None
-    # Two aligned, model-labeled usage rows: Claude (CTX/5H/WK) and Codex. The
-    # Codex row shows its 5H/WK bars + live burn when a snapshot/meter exists,
-    # and stays present throughout a /m:develop flow whenever Codex is enabled
-    # (a dim idle tag between passes) — hidden only when Codex is disabled.
     claude_model = (data.get("model") or {}).get("display_name") or "claude"
-    cl_eff = claude_effort()
-    snap = codex_limits()
-    fresh = bool(snap) and (time.time() - snap.get("ts", 0)) < CODEX_FRESH_TTL
-    burn = codex_segment(m_dir)
-    codex_parts = codex_usage_segments(snap) if fresh else []
-    if burn:
-        codex_parts.append(burn)
-    develop_codex = bool(phase) and codex_enabled(m_dir)
-    show_codex = bool(codex_parts) or develop_codex
-    if not codex_parts and develop_codex:  # develop flow, no live pass -> idle tag
-        codex_parts = [f"{DIM}· idle{RESET}"]
-    codex_model = codex_model_name(snap) if show_codex else ""
-    cx_eff = codex_effort(snap) if show_codex else None
+    cl_eff = (data.get("effort") or {}).get("level") or claude_effort((data.get("model") or {}).get("id"))
+    rows = engine_rows(m_dir, phase)
 
     def _plen(n, e):
-        return len(n) + (len(f" · {e}") if e else 0)
-    label_w = max(_plen(claude_model, cl_eff), _plen(codex_model, cx_eff) if show_codex else 0, 8)
+        return len(n) + (len(f" {e}") if e else 0)
+    label_w = max([_plen(claude_model, cl_eff), 8] + [_plen(n, e) for n, e, _ in rows])
 
     claude_metrics = model_row(claude_model, cl_eff, label_w, [
         ctx_segment(data),
         limit_segment("5H", fh, FIVE_HOUR),
         limit_segment("WK", sd, SEVEN_DAY),
     ], CLAUDE_ORANGE)
-    codex_metrics = (model_row(codex_model, cx_eff, label_w, codex_parts, CODEX_WHITE)
-                     if show_codex else None)
+    engine_metrics = [model_row(n, e, label_w, parts, CODEX_GREY) for n, e, parts in rows]
     meditation = meditation_line(fh)
 
-    lines = [ln for ln in (identity, cockpit, claude_metrics, codex_metrics, meditation) if ln]
+    lines = [ln for ln in (identity, cockpit, claude_metrics, *engine_metrics, meditation) if ln]
     sys.stdout.write("\n".join(lines))
 
 
