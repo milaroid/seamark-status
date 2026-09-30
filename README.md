@@ -1,16 +1,24 @@
-# m-statusline
+<div align="center">
 
-The cockpit for the [`/seamark` pipeline](https://github.com/milorad-teodorovic/m-pipeline):
-a [Claude Code](https://claude.com/claude-code) statusline that shows your git
-branch and ticket, **pace-aware** usage bars that project where your 5-hour and
-weekly limits will land at reset, and — when the pipeline drives Codex or Kimi
-as a second engine — a parallel second-engine usage row plus a live per-run
-token-burn gauge. While `/seamark:develop` runs, a cockpit line tracks the phase, its runtime, the
-task flow, and open blockers — live, from the `.seamark/` state the pipeline writes.
-Without Seamark it degrades to a clean git + usage statusline, but the cockpit
-is the point.
+<img src="assets/seamark.svg" alt="Seamark logo: two channel posts with a dot between them" width="64">
 
-Single file. Python standard library only. No dependencies.
+# Seamark Status
+
+### The cockpit for Claude Code.
+
+Pace-aware usage bars, git and PR state, and the live [Seamark](https://github.com/milorad-teodorovic/m-pipeline) phase, in your Claude Code statusline.
+
+[Install](#install) · [Segments](#what-each-segment-means) · [Seamark integration](#seamark-pipeline-integration) · [Customizing](#customizing)
+
+<img src="assets/loop-status.webp" alt="The Claude Code statusline during a Seamark run: the Seamark mark, the folder and branch, the phase with five progress dots, tasks, usage bars for context, 5-hour, and weekly limits, and a Codex burn row." width="100%">
+
+</div>
+
+---
+
+The usage bars show where your 5-hour and weekly limits will land at reset, not only where they are now. While `/seamark:develop` runs, a cockpit line tracks the phase, its runtime, the tasks, and the verify loop, read live from the `.seamark/` state the pipeline writes. When the pipeline uses Codex or Kimi as a second engine, a second row shows that engine and its token burn.
+
+Without Seamark, it is a clean git and usage statusline. It is a single Python file that uses only the standard library.
 
 ```
 ┃●┃ Seamark │ api │ ⎇ feat/ENG-142 ●3 ↑1 │ ENG-142
@@ -19,14 +27,9 @@ Opus 5.5 high     CTX ███▎░░░░ 41% │ 5H █▊▒▒░░░�
 gpt-6-astra high  · idle
 ```
 
-Each usage row is prefixed with its model name and reasoning effort as one unit
-in a single colour (Claude row in Claude orange, second-engine row in grey). The
-second-engine row is present throughout a `/seamark:develop` run when an engine is
-configured — `· idle` between passes, a live `burn` gauge during plan and
-review — and hidden when the provider is `none`.
+Each usage row starts with its model name and reasoning effort, in one color: Claude orange for the Claude row, grey for the second-engine row. The second-engine row is present for the whole `/seamark:develop` run when an engine is configured. It shows `· idle` between passes and a live `burn` gauge during plan and review, and it is hidden when the provider is `none`.
 
-(In the terminal each segment is colored by load; the block above is the
-plain-text shape.)
+In the terminal, each segment is colored by load. The block above shows the plain-text shape.
 
 ## What each segment means
 
@@ -35,7 +38,7 @@ plain-text shape.)
 | Segment | Meaning |
 |---|---|
 | `┃●┃ Seamark` | The Seamark mark (two teal posts around a blue dot) and the name. On a narrow terminal, only the mark shows. |
-| `m-pipeline` | Name of the current folder, in bold. |
+| `api` | Name of the current folder, in bold. |
 | `⎇ main ●3 ↑1` | Git branch, with `●` uncommitted count, `↑` commits ahead, `↓` behind. Shows the worktree name (`⌂name`) inside a worktree, a short SHA when detached, and nothing outside a repo. Links to the branch on the origin host. |
 | `ENG-142` | Jira ticket captured from the branch via `.seamark/jira.yml` `branchPattern`. Links to `https://<site>/browse/ENG-142` when `.seamark/jira.yml` sets `site`. |
 | `PR #6 draft` | The open PR (or GitLab MR) for this branch, from Claude Code's `pr` fields, linked to the PR page. The state reads `draft` (dim), `review` (amber), `changes` (red), or `approved` (green). |
@@ -52,7 +55,7 @@ The active model is no longer on the identity line — it labels its own usage r
 | Segment | Meaning |
 |---|---|
 | `s implement ◉◉◐○○ 2/5 ·12m` | Phase dots (`◉` done · `◐` current · `○` pending), the running phase, and how long it has been running (mtime of the phase marker). A sixth dot appears when the readiness gate starts. |
-| `loop 2/3 ·4 left` | The `/seamark:verify` loop counter and remaining issues, parsed from `.seamark/PROGRESS.md`. Iterate phase only. |
+| `loop 2/3 ·4 left` | The `/seamark:verify` loop counter and remaining issues, parsed from `.seamark/PROGRESS.md`. Verify phase only. |
 | `tasks 4/6` | Task progress (completed/total) from `.seamark/TASKS.md`. |
 
 **Line 2: Claude metrics** — prefixed with the active model name (in Claude orange)
@@ -109,30 +112,53 @@ stays readable on light and dark themes.
 
 ## Install
 
-Inside Claude Code:
+Seamark Status is part of the Seamark marketplace, and it also installs on its own. Pick one, inside Claude Code.
 
+**With Seamark** (the pipeline and the statusline from one marketplace):
+
+```text
+/plugin marketplace add milorad-teodorovic/m-pipeline
+/plugin install seamark-status@seamark
+/seamark-status:setup
 ```
+
+**On its own:**
+
+```text
 /plugin marketplace add milorad-teodorovic/m-statusline
-/plugin install m-statusline@m-statusline
-/m-statusline:setup
+/plugin install seamark-status@seamark-status
+/seamark-status:setup
 ```
 
-The setup command copies the bundled script to `~/.claude/m-statusline.py` and
-wires the `statusLine` block into `~/.claude/settings.json` (existing settings
-preserved, previous file backed up to `settings.json.bak`). Restart Claude Code
-and the pace banner lights up. Re-running setup is safe; it just refreshes the
-script and the settings block.
+The setup command copies the bundled script to `~/.claude/seamark-status.py` and
+sets the `statusLine` block in `~/.claude/settings.json`. Your other settings stay,
+and the previous file is backed up to `settings.json.bak`. Restart Claude Code to
+see the statusline. You can run setup again at any time to refresh the script and
+the settings block.
 
 There are no packages. The script reads the
-[statusLine stdin JSON](https://platform.claude.com/docs/en/statusline) Claude Code
-feeds it and writes the two lines back.
+[statusLine stdin JSON](https://platform.claude.com/docs/en/statusline) that Claude Code
+sends and writes the lines back.
+
+### Upgrading from m-statusline
+
+This plugin used to be called `m-statusline`. The old version reads `.m/`, so it does not show the Seamark cockpit. To move to the new name:
+
+```text
+/plugin uninstall m-statusline@m-statusline
+/plugin install seamark-status@seamark
+/seamark-status:setup
+```
+
+Setup points `statusLine` at the new script. Then delete the two old files:
+`~/.claude/m-statusline.py` and `~/.claude/.m-statusline-gitcache.json`.
 
 ### Uninstall
 
 Delete the `statusLine` block from `~/.claude/settings.json` and remove
-`~/.claude/m-statusline.py`.
+`~/.claude/seamark-status.py`.
 
-## `/seamark` pipeline integration
+## Seamark pipeline integration
 
 The `s <phase> ◉◉◐○○` segment reads a `.seamark/DEVELOP_ACTIVE` marker (with a
 `current_phase:` line) and per-phase `phase-<name>-done` files, walking up from the

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Claude Code statusline: the m-pipeline cockpit.
+"""Claude Code statusline: the Seamark cockpit.
 
 Reads the statusLine stdin JSON (https://code.claude.com/docs/en/statusline)
 and renders:
 
-  line 1 (identity): folder │ ⎇ branch ●3 ↑1 │ ENG-142
+  line 1 (identity): ┃●┃ Seamark │ folder │ ⎇ branch ●3 ↑1 │ ENG-142
   cockpit (while /seamark:develop runs):
-                     m implement ◉◉◐○○ 2/5 ·12m │ tasks 4/6
+                     s implement ◉◉◐○○ 2/5 ·12m │ tasks 4/6
   metrics:           model effort  CTX ███▍░░░░ 41% │ 5H █▊▒▒░░░░ 23%→41% │ WK …
 
 Usage bars are pace-aware: the 5-hour and weekly bars project end-of-window
@@ -189,7 +189,7 @@ def project(used, resets_at, window):
 # the current directory (the statusLine JSON carries no current-branch field).
 # Results are cached on disk per cwd so the once-per-second refresh does not
 # spawn a fresh fistful of subprocesses every tick.
-GIT_CACHE = os.path.expanduser("~/.claude/.m-statusline-gitcache.json")
+GIT_CACHE = os.path.expanduser("~/.claude/.seamark-status-gitcache.json")
 GIT_TTL = 5
 
 
@@ -434,12 +434,12 @@ def jira_url(seamark_dir, ticket):
 
 
 # ---------------------------------------------------------------------------
-# /seamark pipeline cockpit. m-statusline is the m-pipeline instrument panel: while
+# /seamark pipeline cockpit. seamark-status is the Seamark instrument panel: while
 # /seamark:develop runs, a cockpit line shows the phase dots, the running phase and
 # its runtime, task flow and blocker counts (and the verify loop). When the
 # pipeline is idle it stays quiet except for a small outcome badge and alerts
 # (a BLOCKED last run, a stale index). Everything is read from the .seamark/ state
-# files and learning signals m-pipeline already writes.
+# files and learning signals the Seamark pipeline already writes.
 OUTCOMES = os.path.expanduser("~/.claude/seamark-learning/signals/outcomes.jsonl")
 STALE_DAYS = 30
 
