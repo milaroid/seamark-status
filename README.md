@@ -6,7 +6,7 @@
 
 ### The cockpit for Claude Code.
 
-Pace-aware usage bars, git and PR state, and the live [Seamark](https://github.com/milorad-teodorovic/seamark) phase, in your Claude Code statusline.
+Pace-aware usage bars, git and PR state, and the live [Seamark](https://github.com/milaroid/seamark) phase, in your Claude Code statusline.
 
 [Install](#install) · [Segments](#what-each-segment-means) · [Seamark integration](#seamark-pipeline-integration) · [Customizing](#customizing)
 
@@ -117,7 +117,7 @@ Seamark Status is part of the Seamark marketplace, and it also installs on its o
 **With Seamark** (the pipeline and the statusline from one marketplace):
 
 ```text
-/plugin marketplace add milorad-teodorovic/seamark
+/plugin marketplace add milaroid/seamark
 /plugin install seamark-status@seamark
 /seamark-status:setup
 ```
@@ -125,7 +125,7 @@ Seamark Status is part of the Seamark marketplace, and it also installs on its o
 **On its own:**
 
 ```text
-/plugin marketplace add milorad-teodorovic/seamark-status
+/plugin marketplace add milaroid/seamark-status
 /plugin install seamark-status@seamark-status
 /seamark-status:setup
 ```
@@ -169,7 +169,7 @@ refine → plan → implement → review → verify → readiness (when started)
 ```
 
 This is the convention used by the
-[`/seamark` pipeline](https://github.com/milorad-teodorovic/seamark). If you do not use
+[`/seamark` pipeline](https://github.com/milaroid/seamark). If you do not use
 it, the segment simply never appears and the rest of the statusline works unchanged.
 The dependency is one-way and optional.
 
