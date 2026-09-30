@@ -7,13 +7,13 @@ weekly limits will land at reset, and — when the pipeline drives Codex or Kimi
 as a second engine — a parallel second-engine usage row plus a live per-run
 token-burn gauge. While `/seamark:develop` runs, a cockpit line tracks the phase, its runtime, the
 task flow, and open blockers — live, from the `.seamark/` state the pipeline writes.
-Without m-pipeline it degrades to a clean git + usage statusline, but the cockpit
+Without Seamark it degrades to a clean git + usage statusline, but the cockpit
 is the point.
 
 Single file. Python standard library only. No dependencies.
 
 ```
-api │ ⎇ feat/ENG-142 ●3 ↑1 │ ENG-142
+┃●┃ Seamark │ api │ ⎇ feat/ENG-142 ●3 ↑1 │ ENG-142
 s implement ◉◉◐○○ 2/5 ·12m │ tasks 4/6
 Opus 5.5 high     CTX ███▎░░░░ 41% │ 5H █▊▒▒░░░░ 23%→41% │ WK ██████▏▒ 76%→104% ↻1d20h
 gpt-6-astra high  · idle
@@ -34,6 +34,7 @@ plain-text shape.)
 
 | Segment | Meaning |
 |---|---|
+| `┃●┃ Seamark` | The Seamark mark (two teal posts around a blue dot) and the name. On a narrow terminal, only the mark shows. |
 | `m-pipeline` | Name of the current folder, in bold. |
 | `⎇ main ●3 ↑1` | Git branch, with `●` uncommitted count, `↑` commits ahead, `↓` behind. Shows the worktree name (`⌂name`) inside a worktree, a short SHA when detached, and nothing outside a repo. Links to the branch on the origin host. |
 | `ENG-142` | Jira ticket captured from the branch via `.seamark/jira.yml` `branchPattern`. Links to `https://<site>/browse/ENG-142` when `.seamark/jira.yml` sets `site`. |

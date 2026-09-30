@@ -44,6 +44,8 @@ GREEN = LOAD_GREEN
 YELLOW = LOAD_AMBER
 RED = LOAD_RED
 CYAN = "\033[38;2;80;190;210m"
+MARK_POST = "\033[38;2;20;184;166m"
+MARK_DOT = "\033[38;2;14;165;233m"
 
 SEP = f"{DIM} │ {RESET}"
 FIT = namedtuple("FIT", "countdown arrow bar cache")
@@ -400,6 +402,12 @@ def pr_segment(data):
     kind = "MR" if pr.get("kind") == "mr" else "PR"
     text = f"{CYAN}{kind} #{pr['number']}{RESET}" + (f" {col}{word}{RESET}" if word else "")
     return link(text, pr.get("url"))
+
+
+def brand_segment(word=True):
+    """The Seamark mark, two teal posts around a sky-blue dot, followed by the name unless word is False."""
+    mark = f"{MARK_POST}┃{MARK_DOT}●{MARK_POST}┃{RESET}"
+    return f"{mark} {BOLD}Seamark{RESET}" if word else mark
 
 
 def folder_segment(cwd):
@@ -842,15 +850,18 @@ def main():
     phase = read_current_phase(seamark_dir) if seamark_dir else None
 
     ticket = jira_key(seamark_dir, git["branch"]) if (seamark_dir and git) else None
-    identity = join([
+    identity_parts = [
         folder_segment(cwd),
         git_segment(git, repo_url(workspace, (git or {}).get("branch"))),
         link(f"{DIM}{ticket}{RESET}", jira_url(seamark_dir, ticket)) if ticket else None,
         pr_segment(data),
         idle_badge(seamark_dir) if (seamark_dir and not phase) else None,
-    ])
-    cockpit = cockpit_line(seamark_dir, phase) if (seamark_dir and phase) else None
+    ]
     limit = width_limit()
+    identity = join([brand_segment()] + identity_parts)
+    if limit and visible_width(identity) > limit:
+        identity = join([brand_segment(word=False)] + identity_parts)
+    cockpit = cockpit_line(seamark_dir, phase) if (seamark_dir and phase) else None
     metrics = fitted_rows(data, seamark_dir, phase, limit)
     meditation = meditation_line(fh)
     if limit and visible_width(meditation) > limit:
