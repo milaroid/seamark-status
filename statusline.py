@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Claude Code statusline: the m-pipeline cockpit.
+"""Claude Code statusline: the Seamark cockpit.
 
 Reads the statusLine stdin JSON (https://code.claude.com/docs/en/statusline)
 and renders:
 
-  line 1 (identity): folder │ ⎇ branch ●3 ↑1 │ ENG-142
-  cockpit (while /m:develop runs):
-                     m implement ◉◉◐○○ 2/5 ·12m │ tasks 4/6
+  line 1 (identity): ┃●┃ Seamark │ folder │ ⎇ branch ●3 ↑1 │ ENG-142
+  cockpit (while /seamark:develop runs):
+                     s implement ◉◉◐○○ 2/5 ·12m │ tasks 4/6
   metrics:           model effort  CTX ███▍░░░░ 41% │ 5H █▊▒▒░░░░ 23%→41% │ WK …
 
 Usage bars are pace-aware: the 5-hour and weekly bars project end-of-window
 usage from how much of the window has already elapsed (used% x window/elapsed)
 so a green-looking 60% that is on track to blow past 100% reads red now. The
-cockpit line is read live from the .m/ state files the /m pipeline writes.
+cockpit line is read live from the .seamark/ state files the /seamark pipeline writes.
 """
 
 import json
@@ -44,6 +44,8 @@ GREEN = LOAD_GREEN
 YELLOW = LOAD_AMBER
 RED = LOAD_RED
 CYAN = "\033[38;2;80;190;210m"
+MARK_POST = "\033[38;2;20;184;166m"
+MARK_DOT = "\033[38;2;14;165;233m"
 
 SEP = f"{DIM} │ {RESET}"
 FIT = namedtuple("FIT", "countdown arrow bar cache")
@@ -62,7 +64,7 @@ PR_STATES = {
     "changes_requested": ("changes", RED),
     "approved": ("approved", GREEN),
 }
-PIPELINE = ["refine", "plan", "implement", "review", "iterate"]
+PIPELINE = ["refine", "plan", "implement", "review", "verify"]
 FIVE_HOUR = 5 * 3600
 SEVEN_DAY = 7 * 86400
 CODEX_FRESH_TTL = 6 * 3600  # hide the Codex row when no run within this window
@@ -187,7 +189,7 @@ def project(used, resets_at, window):
 # the current directory (the statusLine JSON carries no current-branch field).
 # Results are cached on disk per cwd so the once-per-second refresh does not
 # spawn a fresh fistful of subprocesses every tick.
-GIT_CACHE = os.path.expanduser("~/.claude/.m-statusline-gitcache.json")
+GIT_CACHE = os.path.expanduser("~/.claude/.seamark-status-gitcache.json")
 GIT_TTL = 5
 
 
@@ -402,6 +404,12 @@ def pr_segment(data):
     return link(text, pr.get("url"))
 
 
+def brand_segment(word=True):
+    """The Seamark mark, two teal posts around a sky-blue dot, followed by the name unless word is False."""
+    mark = f"{MARK_POST}┃{MARK_DOT}●{MARK_POST}┃{RESET}"
+    return f"{mark} {BOLD}Seamark{RESET}" if word else mark
+
+
 def folder_segment(cwd):
     """The name of the current folder in bold, or None when cwd is unknown."""
     name = os.path.basename(os.path.normpath(cwd)) if cwd else ""
@@ -416,9 +424,9 @@ def repo_url(workspace, branch):
     return f"https://{repo['host']}/{repo['owner']}/{repo['name']}/tree/{branch}"
 
 
-def jira_url(m_dir, ticket):
-    """Browse URL for ticket from the .m/jira.yml site key, or None."""
-    for line in _read(os.path.join(m_dir, "jira.yml")).splitlines():
+def jira_url(seamark_dir, ticket):
+    """Browse URL for ticket from the .seamark/jira.yml site key, or None."""
+    for line in _read(os.path.join(seamark_dir, "jira.yml")).splitlines():
         if line.strip().startswith("site:"):
             site = line.split(":", 1)[1].split("#")[0].strip().strip("'\"")
             return f"https://{site}/browse/{ticket}" if site else None
@@ -426,21 +434,21 @@ def jira_url(m_dir, ticket):
 
 
 # ---------------------------------------------------------------------------
-# /m pipeline cockpit. m-statusline is the m-pipeline instrument panel: while
-# /m:develop runs, a cockpit line shows the phase dots, the running phase and
-# its runtime, task flow and blocker counts (and the iterate loop). When the
+# /seamark pipeline cockpit. seamark-status is the Seamark instrument panel: while
+# /seamark:develop runs, a cockpit line shows the phase dots, the running phase and
+# its runtime, task flow and blocker counts (and the verify loop). When the
 # pipeline is idle it stays quiet except for a small outcome badge and alerts
-# (a BLOCKED last run, a stale index). Everything is read from the .m/ state
-# files and learning signals m-pipeline already writes.
-OUTCOMES = os.path.expanduser("~/.claude/m-learning/signals/outcomes.jsonl")
+# (a BLOCKED last run, a stale index). Everything is read from the .seamark/ state
+# files and learning signals the Seamark pipeline already writes.
+OUTCOMES = os.path.expanduser("~/.claude/seamark-learning/signals/outcomes.jsonl")
 STALE_DAYS = 30
 
 
 def find_m_dir(cwd):
-    """Walk up from cwd to the nearest .m/ directory."""
+    """Walk up from cwd to the nearest .seamark/ directory."""
     path = os.path.abspath(cwd or os.getcwd())
     while True:
-        candidate = os.path.join(path, ".m")
+        candidate = os.path.join(path, ".seamark")
         if os.path.isdir(candidate):
             return candidate
         parent = os.path.dirname(path)
@@ -449,9 +457,9 @@ def find_m_dir(cwd):
         path = parent
 
 
-def read_current_phase(m_dir):
+def read_current_phase(seamark_dir):
     try:
-        with open(os.path.join(m_dir, "DEVELOP_ACTIVE"), encoding="utf-8") as fh:
+        with open(os.path.join(seamark_dir, "DEVELOP_ACTIVE"), encoding="utf-8") as fh:
             for line in fh:
                 if line.startswith("current_phase:"):
                     return line.split(":", 1)[1].strip()
@@ -468,9 +476,9 @@ def _read(path):
         return ""
 
 
-def task_counts(m_dir):
+def task_counts(seamark_dir):
     """(active, completed) bullet counts from TASKS.md sections."""
-    text = _read(os.path.join(m_dir, "TASKS.md"))
+    text = _read(os.path.join(seamark_dir, "TASKS.md"))
     if not text:
         return None
     counts = {"Active": 0, "Completed": 0}
@@ -483,19 +491,19 @@ def task_counts(m_dir):
     return counts["Active"], counts["Completed"]
 
 
-def iterate_loop(m_dir):
+def iterate_loop(seamark_dir):
     """Latest 'Loop N/3: M fixed, K remaining' from PROGRESS.md, or None."""
     hits = re.findall(r"Loop (\d+)/3: \d+ fixed, (\d+) remaining",
-                      _read(os.path.join(m_dir, "PROGRESS.md")))
+                      _read(os.path.join(seamark_dir, "PROGRESS.md")))
     return hits[-1] if hits else None
 
 
-def jira_key(m_dir, branch):
-    """Ticket key captured from the branch via .m/jira.yml branchPattern."""
+def jira_key(seamark_dir, branch):
+    """Ticket key captured from the branch via .seamark/jira.yml branchPattern."""
     if not branch:
         return None
     pattern = None
-    for line in _read(os.path.join(m_dir, "jira.yml")).splitlines():
+    for line in _read(os.path.join(seamark_dir, "jira.yml")).splitlines():
         if line.strip().startswith("branchPattern:"):
             pattern = line.split(":", 1)[1].strip().strip("'\"")
             # YAML double-quoted strings escape backslashes; collapse them.
@@ -530,10 +538,10 @@ def last_outcomes():
     return verdicts[-1], streak
 
 
-def index_stale_days(m_dir):
-    """Days since .m/INDEX.md was touched, or None if absent."""
+def index_stale_days(seamark_dir):
+    """Days since .seamark/INDEX.md was touched, or None if absent."""
     try:
-        age = time.time() - os.path.getmtime(os.path.join(m_dir, "INDEX.md"))
+        age = time.time() - os.path.getmtime(os.path.join(seamark_dir, "INDEX.md"))
     except OSError:
         return None
     return int(age // 86400)
@@ -571,15 +579,15 @@ def _yaml_block(text, name):
     return block
 
 
-def second_engine(m_dir):
-    """The /m second engine as {provider, model, effort, budget}, or None.
+def second_engine(seamark_dir):
+    """The /seamark second engine as {provider, model, effort, budget}, or None.
 
-    Reads the .m/pipeline.yml second_engine: block. Without one, a legacy
+    Reads the .seamark/pipeline.yml second_engine: block. Without one, a legacy
     codex: block with enabled: true maps to provider codex.
     """
-    if not m_dir:
+    if not seamark_dir:
         return None
-    text = _read(os.path.join(m_dir, "pipeline.yml"))
+    text = _read(os.path.join(seamark_dir, "pipeline.yml"))
     block = _yaml_block(text, "second_engine")
     if block is None:
         legacy = _yaml_block(text, "codex") or {}
@@ -611,15 +619,15 @@ def humanize_tokens(n):
     return str(n)
 
 
-def engine_burn(m_dir, engine, fit=FITS[0]):
-    """Live second-engine token burn: .m/handoff/<provider>-meter.txt vs the budget.
+def engine_burn(seamark_dir, engine, fit=FITS[0]):
+    """Live second-engine token burn: .seamark/handoff/<provider>-meter.txt vs the budget.
 
-    The meter file exists only while a /m second-engine pass (plan/research/
+    The meter file exists only while a /seamark second-engine pass (plan/research/
     review) is burning tokens; the pipeline cleans it up at the end of every
     run, so the gauge appears during dual-engine work and stays quiet otherwise."""
-    if not m_dir or not engine:
+    if not seamark_dir or not engine:
         return None
-    used = _read_int(os.path.join(m_dir, "handoff", f"{engine['provider']}-meter.txt"))
+    used = _read_int(os.path.join(seamark_dir, "handoff", f"{engine['provider']}-meter.txt"))
     if not used:
         return None
     budget = engine["budget"]
@@ -687,7 +695,7 @@ def codex_usage_segments(snap, fit=FITS[0]):
 
 
 def codex_model_name(snap, configured=None):
-    """Codex model: the snapshot's model, else the /m configured model, else config.toml."""
+    """Codex model: the snapshot's model, else the /seamark configured model, else config.toml."""
     if snap and snap.get("model"):
         return snap["model"]
     if configured:
@@ -700,7 +708,7 @@ def codex_model_name(snap, configured=None):
 
 
 def codex_effort(snap, configured=None):
-    """Codex effort: the snapshot's, else the /m configured effort, else config.toml."""
+    """Codex effort: the snapshot's, else the /seamark configured effort, else config.toml."""
     if snap and snap.get("effort"):
         return snap["effort"]
     if configured:
@@ -739,29 +747,29 @@ def model_row(name, effort, width, parts, color=DIM):
     return f"{color}{label}{RESET}{' ' * max(0, width - visible_width(label))}  {body}"
 
 
-def idle_badge(m_dir):
+def idle_badge(seamark_dir):
     """Quiet idle summary: alerts loudly, brags softly, says nothing otherwise."""
     verdict, _ = last_outcomes()
     if verdict == "BLOCKED":
-        return f"{RED}m ✗ last run BLOCKED{RESET}"
-    stale = index_stale_days(m_dir)
+        return f"{RED}s ✗ last run BLOCKED{RESET}"
+    stale = index_stale_days(seamark_dir)
     if stale is not None and stale >= STALE_DAYS:
-        return f"{YELLOW}m idx stale {stale}d{RESET}"
+        return f"{YELLOW}s idx stale {stale}d{RESET}"
     return None
 
 
-def tracked_phases(m_dir, phase):
+def tracked_phases(seamark_dir, phase):
     """The phases to draw: the core five, plus readiness once that gate has started."""
-    started = os.path.isfile(os.path.join(m_dir, "phase-readiness-started"))
+    started = os.path.isfile(os.path.join(seamark_dir, "phase-readiness-started"))
     return PIPELINE + ["readiness"] if phase == "readiness" or started else PIPELINE
 
 
-def cockpit_line(m_dir, phase):
+def cockpit_line(seamark_dir, phase):
     """The pipeline cockpit: dots, phase + runtime, loop, tasks, blockers."""
     def done(ph):
-        return os.path.isfile(os.path.join(m_dir, f"phase-{ph}-done"))
+        return os.path.isfile(os.path.join(seamark_dir, f"phase-{ph}-done"))
 
-    phases = tracked_phases(m_dir, phase)
+    phases = tracked_phases(seamark_dir, phase)
     dots = []
     for ph in phases:
         if done(ph):
@@ -773,42 +781,42 @@ def cockpit_line(m_dir, phase):
     completed = sum(1 for ph in phases if done(ph))
     track = "".join(dots)
 
-    parts = [f"{DIM}m{RESET} {CYAN}{phase}{RESET} {track} "
+    parts = [f"{DIM}s{RESET} {CYAN}{phase}{RESET} {track} "
              f"{DIM}{completed}/{len(phases)}{RESET}"]
     try:  # phase runtime from the -started marker's mtime
-        started = os.path.getmtime(os.path.join(m_dir, f"phase-{phase}-started"))
+        started = os.path.getmtime(os.path.join(seamark_dir, f"phase-{phase}-started"))
         parts[0] += f" {DIM}·{humanize_secs(time.time() - started)}{RESET}"
     except OSError:
         pass
-    if phase == "iterate":
-        loop = iterate_loop(m_dir)
+    if phase == "verify":
+        loop = iterate_loop(seamark_dir)
         if loop:
             n, remaining = loop
             col = GREEN if remaining == "0" else YELLOW
             parts.append(f"{col}loop {n}/3 ·{remaining} left{RESET}")
-    tasks = task_counts(m_dir)
+    tasks = task_counts(seamark_dir)
     if tasks and (tasks[0] or tasks[1]):
         done_n, total = tasks[1], tasks[0] + tasks[1]
         parts.append(f"{DIM}tasks {done_n}/{total}{RESET}")
     return join(parts)
 
 
-def engine_rows(m_dir, phase, fit=FITS[0]):
+def engine_rows(seamark_dir, phase, fit=FITS[0]):
     """Second-engine usage rows as (model, effort, parts) tuples.
 
     The Codex row shows its 5H/WK bars while its snapshot is fresh, and the
-    live burn during a Codex pass. The row of the configured /m engine
-    (Codex or Kimi) stays present for the whole /m:develop run, with a dim
+    live burn during a Codex pass. The row of the configured /seamark engine
+    (Codex or Kimi) stays present for the whole /seamark:develop run, with a dim
     idle tag between passes. An engine with nothing to show has no row.
     """
-    engine = second_engine(m_dir)
+    engine = second_engine(seamark_dir)
     provider = engine["provider"] if engine else None
     develop = bool(phase) and bool(engine)
     rows = []
     snap = codex_limits()
     fresh = bool(snap) and (time.time() - snap.get("ts", 0)) < CODEX_FRESH_TTL
     codex_parts = codex_usage_segments(snap, fit) if fresh else []
-    burn = engine_burn(m_dir, engine, fit) if engine else None
+    burn = engine_burn(seamark_dir, engine, fit) if engine else None
     if provider == "codex" and burn:
         codex_parts.append(burn)
     if provider == "codex" and develop and not codex_parts:
@@ -838,20 +846,23 @@ def main():
     fh = limits.get("five_hour") or {}
 
     git = git_info(cwd, workspace.get("git_worktree"))
-    m_dir = find_m_dir(cwd)
-    phase = read_current_phase(m_dir) if m_dir else None
+    seamark_dir = find_m_dir(cwd)
+    phase = read_current_phase(seamark_dir) if seamark_dir else None
 
-    ticket = jira_key(m_dir, git["branch"]) if (m_dir and git) else None
-    identity = join([
+    ticket = jira_key(seamark_dir, git["branch"]) if (seamark_dir and git) else None
+    identity_parts = [
         folder_segment(cwd),
         git_segment(git, repo_url(workspace, (git or {}).get("branch"))),
-        link(f"{DIM}{ticket}{RESET}", jira_url(m_dir, ticket)) if ticket else None,
+        link(f"{DIM}{ticket}{RESET}", jira_url(seamark_dir, ticket)) if ticket else None,
         pr_segment(data),
-        idle_badge(m_dir) if (m_dir and not phase) else None,
-    ])
-    cockpit = cockpit_line(m_dir, phase) if (m_dir and phase) else None
+        idle_badge(seamark_dir) if (seamark_dir and not phase) else None,
+    ]
     limit = width_limit()
-    metrics = fitted_rows(data, m_dir, phase, limit)
+    identity = join([brand_segment()] + identity_parts)
+    if limit and visible_width(identity) > limit:
+        identity = join([brand_segment(word=False)] + identity_parts)
+    cockpit = cockpit_line(seamark_dir, phase) if (seamark_dir and phase) else None
+    metrics = fitted_rows(data, seamark_dir, phase, limit)
     meditation = meditation_line(fh)
     if limit and visible_width(meditation) > limit:
         meditation = None
@@ -868,14 +879,14 @@ def width_limit():
         return None
 
 
-def metric_rows(data, m_dir, phase, fit):
+def metric_rows(data, seamark_dir, phase, fit):
     """The Claude usage row and the second-engine rows for one fit level."""
     limits = data.get("rate_limits") or {}
     claude_model = (data.get("model") or {}).get("display_name") or "claude"
     cl_eff = (data.get("effort") or {}).get("level") or claude_effort((data.get("model") or {}).get("id"))
     if data.get("fast_mode"):
         cl_eff = f"{cl_eff} ⚡" if cl_eff else "⚡"
-    rows = engine_rows(m_dir, phase, fit)
+    rows = engine_rows(seamark_dir, phase, fit)
     label_w = max([visible_width(" ".join(filter(None, (claude_model, cl_eff)))), 8]
                   + [visible_width(" ".join(filter(None, (n, e)))) for n, e, _ in rows])
     claude_row = model_row(claude_model, cl_eff, label_w, [
@@ -887,11 +898,11 @@ def metric_rows(data, m_dir, phase, fit):
     return [claude_row] + [model_row(n, e, label_w, parts, CODEX_GREY) for n, e, parts in rows]
 
 
-def fitted_rows(data, m_dir, phase, limit):
+def fitted_rows(data, seamark_dir, phase, limit):
     """Metric rows at the fullest fit level whose widest row fits in limit."""
     rows = []
     for fit in FITS:
-        rows = [r for r in metric_rows(data, m_dir, phase, fit) if r]
+        rows = [r for r in metric_rows(data, seamark_dir, phase, fit) if r]
         if not limit or max(map(visible_width, rows), default=0) <= limit:
             return rows
     return rows

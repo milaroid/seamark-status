@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# m-statusline setup engine, invoked by the /m-statusline:setup plugin command.
+# seamark-status setup engine, invoked by the /seamark-status:setup plugin command.
 #
 # Copies the statusline.py sitting next to this script to
-# ~/.claude/m-statusline.py and wires the statusLine block into
+# ~/.claude/seamark-status.py and wires the statusLine block into
 # ~/.claude/settings.json (backing the file up to settings.json.bak first).
 # Re-running is safe; it just refreshes both.
 set -euo pipefail
 
-DEST="$HOME/.claude/m-statusline.py"
+DEST="$HOME/.claude/seamark-status.py"
 SETTINGS="$HOME/.claude/settings.json"
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)/statusline.py"
 
@@ -29,7 +29,7 @@ if os.path.exists(settings_path):
 
 cfg["statusLine"] = {
     "type": "command",
-    "command": "python3 ~/.claude/m-statusline.py",
+    "command": "python3 ~/.claude/seamark-status.py",
     "refreshInterval": 1,
 }
 
@@ -43,4 +43,4 @@ print("statusLine wired in " + settings_path
 PY
 
 echo "installed: $DEST"
-echo "restart Claude Code (or start a new session) and the duck starts running 🦆"
+echo "restart Claude Code (or start a new session) to see the statusline"

@@ -1,6 +1,6 @@
 {
-  "name": "m-statusline",
-  "description": "Two-line Claude Code statusline: active model, /m pipeline stage, and pace-aware usage bars with an animated burn duck (🦆 strolling, 🦆💨 sprinting, 🦆🔥 on fire). Single Python file, stdlib only. Run /m-statusline:setup once to wire it into settings.json.",
+  "name": "seamark-status",
+  "description": "Claude Code statusline with the Seamark mark, git and PR state, the live Seamark phase, and pace-aware usage bars. Single Python file, standard library only. Run /seamark-status:setup once to wire it into settings.json.",
   "version": "1.0.0",
   "author": {
     "name": "Milorad Teodorovic",
